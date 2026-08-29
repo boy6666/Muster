@@ -19,6 +19,9 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    # 超限上传时把请求体读完再回 413 JSON，否则连接会被提前掐断，客户端收不到响应
+    max-swallow-size: -1
 
 muster:
   jwt-secret: ${JWT_SECRET:muster-dev-secret-0123456789abcdef0123456789abcdef}

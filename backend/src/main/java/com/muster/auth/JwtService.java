@@ -17,12 +17,21 @@ import java.util.Optional;
 @Service
 public class JwtService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(JwtService.class);
+
+    /** 与 application.yml 的开发默认值一致；线上若仍为此值，令牌可被任何读过源码的人伪造。 */
+    static final String DEV_SECRET = "muster-dev-secret-0123456789abcdef0123456789abcdef";
+
     private final SecretKey key;
     private final Duration ttl;
 
     @Autowired
     public JwtService(@Value("${muster.jwt-secret}") String secret) {
         this(secret, Duration.ofDays(7));
+        if (DEV_SECRET.equals(secret)) {
+            log.warn("JWT 正在使用内置开发密钥：请通过环境变量 JWT_SECRET 设置随机密钥，否则管理员令牌可被伪造");
+        }
     }
 
     JwtService(String secret, Duration ttl) {

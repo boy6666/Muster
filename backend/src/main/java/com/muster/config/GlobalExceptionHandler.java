@@ -44,6 +44,17 @@ public class GlobalExceptionHandler {
         return body(400, ErrorCode.VALIDATION.name(), "请求体格式不正确");
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUpload(
+            org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        return body(413, "PAYLOAD_TOO_LARGE", "上传文件过大，最大 10MB");
+    }
+
+    @ExceptionHandler(com.alibaba.excel.exception.ExcelAnalysisException.class)
+    public ResponseEntity<Map<String, Object>> handleBadExcel(com.alibaba.excel.exception.ExcelAnalysisException e) {
+        return body(400, ErrorCode.VALIDATION.name(), "文件不是有效的 Excel 文件");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnknown(Exception e) {
         log.error("未处理异常", e);

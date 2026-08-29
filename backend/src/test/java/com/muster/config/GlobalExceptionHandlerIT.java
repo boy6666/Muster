@@ -31,4 +31,48 @@ class GlobalExceptionHandlerIT extends IntegrationTestBase {
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         assertThat(resp.getBody()).contains("VALIDATION");
     }
+
+    @Test
+    void nonExcelRosterUploadReturnsValidation() {
+        // 导入接口先校验「当前活动」，须先建活动才能触达文件解析逻辑
+        postJson("/api/activity", java.util.Map.of(
+                "name", "迎新晚会",
+                "startTime", "2026-08-29T10:00:00",
+                "endTime", "2026-08-29T12:00:00",
+                "groupSizeLimit", 5));
+        var resource = new org.springframework.core.io.ByteArrayResource("这不是Excel文件".getBytes()) {
+            @Override
+            public String getFilename() {
+                return "roster.txt";
+            }
+        };
+        var body = new org.springframework.util.LinkedMultiValueMap<String, Object>();
+        body.add("file", resource);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(token);
+        var resp = rest.exchange("/api/roster/import", HttpMethod.POST,
+                new HttpEntity<>(body, headers), String.class);
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("VALIDATION");
+    }
+
+    @Test
+    void oversizedUploadReturns413() {
+        var resource = new org.springframework.core.io.ByteArrayResource(new byte[10 * 1024 * 1024 + 1]) {
+            @Override
+            public String getFilename() {
+                return "big.xlsx";
+            }
+        };
+        var body = new org.springframework.util.LinkedMultiValueMap<String, Object>();
+        body.add("file", resource);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(token);
+        var resp = rest.exchange("/api/roster/import", HttpMethod.POST,
+                new HttpEntity<>(body, headers), String.class);
+        assertThat(resp.getStatusCode().value()).isEqualTo(413);
+        assertThat(resp.getBody()).contains("PAYLOAD_TOO_LARGE");
+    }
 }

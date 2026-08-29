@@ -133,7 +133,12 @@ public class RosterService {
         person.setPhone(phone);
         person.setDepartment(department);
         person.setCreatedAt(LocalDateTime.now(clock));
-        personMapper.insert(person);
+        try {
+            personMapper.insert(person);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 预查与插入之间的并发窗口由 uk_activity_phone 唯一键兜底
+            throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
+        }
         return person;
     }
 }

@@ -56,7 +56,8 @@ public class ActivityService {
                 .eq(Activity::getQrToken, token));
     }
 
-    public Activity create(ActivityCreateRequest request) {
+    /** synchronized：串行化「查有无活动 → 插入」检查窗口，防止并发建出两个活动。 */
+    public synchronized Activity create(ActivityCreateRequest request) {
         Activity existing = current();
         if (existing != null) {
             if (!Boolean.TRUE.equals(existing.getExported())) {

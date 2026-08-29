@@ -89,4 +89,5 @@
 | ARCHIVE_REQUIRED | 409 | 未归档先建/删 |
 | WINDOW_CLOSED | 409 | 活动未开始或已结束时的编辑类操作 |
 | PHONE_DUPLICATE | 400 | 花名册手机号重复 |
+| PAYLOAD_TOO_LARGE | 413 | 上传文件超过 10MB |
 | INTERNAL | 500 | 未知错误（已记入服务端日志） |

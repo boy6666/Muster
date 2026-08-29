@@ -44,6 +44,9 @@ public abstract class IntegrationTestBase {
     @Autowired
     protected org.springframework.security.crypto.password.PasswordEncoder encoder;
 
+    @Autowired
+    protected java.time.Clock clock;
+
     protected String token;
 
     @BeforeEach

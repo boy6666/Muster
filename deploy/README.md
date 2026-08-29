@@ -12,3 +12,5 @@ docker compose up -d --build
 - 后端日志：`docker compose logs -f backend`
 
 首次启动后端会自动建表（schema.sql 幂等）并创建默认管理员。
+
+**升级注意**：schema.sql 只做 `CREATE TABLE IF NOT EXISTS`，不会对已存在的表补列。跨大版本升级（如旧库缺 `team.cap_token` 列）需先执行 `docker compose down -v` 重建卷或手工 `ALTER TABLE`。

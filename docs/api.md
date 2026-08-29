@@ -64,6 +64,13 @@
 | GET | `/api/stats` | `{total,joined,notJoined,teamCount,pendingTeamCount}` |
 | GET | `/api/stats/export?type=JOINED\|MISSING` | 单表 xlsx（已参加 5 列 / 未参加 3 列） |
 
+## 审计与流水（需登录）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/audit/logs?action=&page=&size=` | 管理操作审计日志（建/改/删/结束/归档活动、花名册导入增删、管理员改组、审核），按 id 倒序分页 |
+| GET | `/api/teams/{id}/events` | 组生命周期流水，时间正序：`SUBMITTED`/`EDITED_BY_LEADER`/`EDITED_BY_ADMIN`/`PASSED`/`REJECTED`（驳回带理由） |
+
 ## WebSocket `/ws/stats`（匿名握手但需校验）
 
 `ws://<host>/ws/stats?token=<JWT>`。握手成功即推送当前统计帧；任何提交/改组/审核事件后推送新帧。帧格式同 `/api/stats`。无效 token → 握手 401 拒绝。

@@ -14,6 +14,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
+import java.util.Map;
+
 /**
  * 集成测试基座：单例 MySQL 容器 + 每个用例前清库并重置管理员账号。
  */
@@ -45,13 +47,26 @@ public abstract class IntegrationTestBase {
     protected String token;
 
     @BeforeEach
-    void resetDatabase() {
+    void resetDatabase() throws com.fasterxml.jackson.core.JsonProcessingException {
         jdbc.update("DELETE FROM team_member");
         jdbc.update("DELETE FROM team");
         jdbc.update("DELETE FROM person");
         jdbc.update("DELETE FROM activity");
         jdbc.update("DELETE FROM admin_user");
         jdbc.update("INSERT INTO admin_user(username, password_hash) VALUES('admin', ?)", encoder.encode("admin123"));
+        loginAsAdmin();
+    }
+
+    /** 每个用例默认以 admin 登录，填充 token；需要匿名场景的用例可先置回 null。 */
+    protected void loginAsAdmin() throws com.fasterxml.jackson.core.JsonProcessingException {
+        var resp = rest.postForEntity("/api/auth/login",
+                Map.of("username", "admin", "password", "admin123"), String.class);
+        if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+            token = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+                    .readTree(resp.getBody()).path("token").asText(null);
+        } else {
+            token = null;
+        }
     }
 
     protected HttpHeaders authHeaders() {

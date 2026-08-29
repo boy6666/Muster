@@ -29,6 +29,7 @@ export interface TeamDetail {
   name: string
   status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
   rejectReason: string | null
+  capToken: string | null
   overLimit: boolean
   submittedAt: string
   members: TeamMemberView[]

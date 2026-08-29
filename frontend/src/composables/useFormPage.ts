@@ -16,16 +16,39 @@ export function useFormPage(token: string) {
   const team: Ref<TeamDetail | null> = ref(null)
   const conflicts: Ref<ConflictView[]> = ref([])
   const editing = ref(false)
+  const cap = ref('')
 
   const PHONE = /^1[3-9]\d{9}$/
+
+  /** 二维码 token 人人可见，组级操作必须带提交时发放的 capToken（旧格式/无效记录直接清理）。 */
+  function readStoredTeam(): { teamId: number; cap: string } | null {
+    const raw = localStorage.getItem(`muster.team.${token}`)
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw) as { teamId?: unknown; cap?: unknown }
+      if (typeof parsed.teamId === 'number' && typeof parsed.cap === 'string') {
+        return { teamId: parsed.teamId, cap: parsed.cap }
+      }
+    } catch { /* 旧格式或损坏数据，走清理 */ }
+    localStorage.removeItem(`muster.team.${token}`)
+    return null
+  }
+
+  function storeTeam(detail: TeamDetail): void {
+    localStorage.setItem(`muster.team.${token}`,
+      JSON.stringify({ teamId: detail.id, cap: detail.capToken ?? '' }))
+  }
 
   async function load() {
     const { data } = await http.get<FormInfo>(`/api/form/${token}`)
     info.value = data
-    const saved = localStorage.getItem(`muster.team.${token}`)
+    const saved = readStoredTeam()
     if (saved) {
-      try { team.value = (await http.get<TeamDetail>(`/api/form/${token}/teams/${saved}`)).data }
-      catch { localStorage.removeItem(`muster.team.${token}`) }
+      try {
+        team.value = (await http.get<TeamDetail>(
+          `/api/form/${token}/teams/${saved.teamId}?cap=${encodeURIComponent(saved.cap)}`)).data
+        if (team.value.capToken) cap.value = team.value.capToken
+      } catch { localStorage.removeItem(`muster.team.${token}`) }
     }
   }
 
@@ -90,7 +113,8 @@ export function useFormPage(token: string) {
       const resp = await http.post<TeamDetail>(`/api/form/${token}/teams`,
         { memberPhoneList: members.value.map(m => m.phone) })
       team.value = resp.data
-      localStorage.setItem(`muster.team.${token}`, String(resp.data.id))
+      if (resp.data.capToken) cap.value = resp.data.capToken
+      storeTeam(resp.data)
       editing.value = false
     } catch (e) {
       const apiError = e as ApiError
@@ -110,15 +134,19 @@ export function useFormPage(token: string) {
   }
 
   async function saveEdit(): Promise<void> {
-    const resp = await http.put<TeamDetail>(`/api/form/${token}/teams/${team.value!.id}`,
+    const resp = await http.put<TeamDetail>(
+      `/api/form/${token}/teams/${team.value!.id}?cap=${encodeURIComponent(cap.value)}`,
       { memberPhoneList: members.value.map(m => m.phone) })
     team.value = resp.data
+    if (resp.data.capToken) cap.value = resp.data.capToken
+    storeTeam(resp.data)
     editing.value = false
   }
 
   async function reloadTeam(): Promise<void> {
     if (!team.value) return
-    team.value = (await http.get<TeamDetail>(`/api/form/${token}/teams/${team.value.id}`)).data
+    team.value = (await http.get<TeamDetail>(
+      `/api/form/${token}/teams/${team.value.id}?cap=${encodeURIComponent(cap.value)}`)).data
   }
 
   return {

@@ -27,13 +27,13 @@
     <el-dialog v-model="addVisible" title="添加人员" width="420px">
       <el-form label-width="80px">
         <el-form-item label="姓名">
-          <el-input v-model="addForm.name" />
+          <el-input v-model="addForm.name" placeholder="姓名" />
         </el-form-item>
         <el-form-item label="手机号">
-          <el-input v-model="addForm.phone" type="tel" maxlength="11" />
+          <el-input v-model="addForm.phone" type="tel" maxlength="11" placeholder="11 位手机号" />
         </el-form-item>
         <el-form-item label="部门">
-          <el-input v-model="addForm.department" />
+          <el-input v-model="addForm.department" placeholder="如：计算机系" />
         </el-form-item>
       </el-form>
       <template #footer>

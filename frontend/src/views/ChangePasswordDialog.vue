@@ -2,7 +2,8 @@
   <el-dialog v-model="visible" title="修改密码" width="400px" @closed="reset">
     <el-form label-width="90px">
       <el-form-item label="原密码">
-        <el-input v-model="oldPassword" type="password" show-password autocomplete="current-password" />
+        <el-input v-model="oldPassword" type="password" show-password
+                  autocomplete="current-password" placeholder="输入当前密码" />
       </el-form-item>
       <el-form-item label="新密码">
         <el-input v-model="newPassword" type="password" show-password
@@ -10,7 +11,7 @@
       </el-form-item>
       <el-form-item label="确认新密码">
         <el-input v-model="confirmPassword" type="password" show-password
-                  autocomplete="new-password" />
+                  autocomplete="new-password" placeholder="再次输入新密码" />
       </el-form-item>
     </el-form>
     <template #footer>

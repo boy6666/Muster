@@ -19,9 +19,11 @@ import java.util.Map;
 public class ActivityController {
 
     private final ActivityService activityService;
+    private final com.muster.stats.ExportService exportService;
 
-    public ActivityController(ActivityService activityService) {
+    public ActivityController(ActivityService activityService, com.muster.stats.ExportService exportService) {
         this.activityService = activityService;
+        this.exportService = exportService;
     }
 
     @GetMapping
@@ -58,5 +60,17 @@ public class ActivityController {
     @GetMapping("/form-url")
     public Map<String, String> formUrl() {
         return Map.of("url", activityService.formUrl(activityService.requireCurrent()));
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/export/archive")
+    public org.springframework.http.ResponseEntity<byte[]> exportArchive() {
+        byte[] bytes = exportService.archive();
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        headers.setContentDisposition(org.springframework.http.ContentDisposition.attachment()
+                .filename("归档包.xlsx", java.nio.charset.StandardCharsets.UTF_8)
+                .build());
+        return org.springframework.http.ResponseEntity.ok().headers(headers).body(bytes);
     }
 }

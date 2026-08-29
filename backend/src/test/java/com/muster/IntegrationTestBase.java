@@ -39,6 +39,9 @@ public abstract class IntegrationTestBase {
     @Autowired
     protected TestRestTemplate rest;
 
+    @org.springframework.boot.test.web.server.LocalServerPort
+    protected int port;
+
     @Autowired
     protected JdbcTemplate jdbc;
 
@@ -92,6 +95,14 @@ public abstract class IntegrationTestBase {
 
     protected ResponseEntity<String> getJson(String url) {
         return rest.exchange(url, HttpMethod.GET, new HttpEntity<>(authHeaders()), String.class);
+    }
+
+    protected ResponseEntity<byte[]> getBytes(String url) {
+        return rest.exchange(url, HttpMethod.GET, new HttpEntity<>(authHeaders()), byte[].class);
+    }
+
+    protected ResponseEntity<byte[]> postBytes(String url) {
+        return rest.exchange(url, HttpMethod.POST, new HttpEntity<>(authHeaders()), byte[].class);
     }
 
     protected ResponseEntity<String> deleteJson(String url) {

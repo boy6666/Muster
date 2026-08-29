@@ -33,10 +33,10 @@ class AuditFlowIT extends IntegrationTestBase {
         return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body);
     }
 
-    private long submitTeam() throws Exception {
+    private JsonNode submitTeam() throws Exception {
         var resp = postJson("/api/form/" + formToken + "/teams",
                 Map.of("memberPhoneList", List.of("13800000001", "13800000002")));
-        return json(resp.getBody()).path("id").asLong();
+        return json(resp.getBody());
     }
 
     private List<JsonNode> teamEvents(long teamId) throws Exception {
@@ -81,10 +81,12 @@ class AuditFlowIT extends IntegrationTestBase {
 
     @Test
     void teamEventsRecordFullLifecycle() throws Exception {
-        long teamId = submitTeam();
+        JsonNode team = submitTeam();
+        long teamId = team.path("id").asLong();
+        String cap = team.path("capToken").asText();
 
         // 组长改组
-        putJson("/api/form/" + formToken + "/teams/" + teamId,
+        putJson("/api/form/" + formToken + "/teams/" + teamId + "?cap=" + cap,
                 Map.of("memberPhoneList", List.of("13800000001")));
         // 管理员改组
         putJson("/api/teams/" + teamId + "/members",
@@ -105,7 +107,7 @@ class AuditFlowIT extends IntegrationTestBase {
 
     @Test
     void eventsOfOtherTeamNotLeaked() throws Exception {
-        long teamId = submitTeam();
+        long teamId = submitTeam().path("id").asLong();
         var second = postJson("/api/form/" + formToken + "/teams",
                 Map.of("memberPhoneList", List.of("13800000003")));
         long team2 = json(second.getBody()).path("id").asLong();

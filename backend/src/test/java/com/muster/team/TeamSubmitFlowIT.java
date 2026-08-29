@@ -168,10 +168,12 @@ class TeamSubmitFlowIT extends IntegrationTestBase {
     @Test
     void myTeamEndpointReturnsSameDetail() throws Exception {
         var submitted = submit(List.of("13800000001", "13800000002"));
-        var teamId = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(submitted.getBody()).path("id").asLong();
+        var tree = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(submitted.getBody());
+        var teamId = tree.path("id").asLong();
+        var cap = tree.path("capToken").asText();
 
-        var resp = getJson("/api/form/" + formToken + "/teams/" + teamId);
+        var resp = getJson("/api/form/" + formToken + "/teams/" + teamId + "?cap=" + cap);
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getBody())
                 .contains("\"name\":\"组1\"")
@@ -182,7 +184,7 @@ class TeamSubmitFlowIT extends IntegrationTestBase {
     @Test
     void myTeamWithUnknownTeamIdReturns404() {
         submit(List.of("13800000001"));
-        var resp = getJson("/api/form/" + formToken + "/teams/999");
+        var resp = getJson("/api/form/" + formToken + "/teams/999?cap=anything");
         assertThat(resp.getStatusCode().value()).isEqualTo(404);
         assertThat(resp.getBody()).contains("NOT_FOUND");
     }

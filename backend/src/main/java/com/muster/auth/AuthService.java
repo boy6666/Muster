@@ -13,11 +13,14 @@ public class AuthService {
     private final AdminUserMapper adminUserMapper;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final com.muster.audit.OpLogService opLogService;
 
-    public AuthService(AdminUserMapper adminUserMapper, JwtService jwtService, PasswordEncoder passwordEncoder) {
+    public AuthService(AdminUserMapper adminUserMapper, JwtService jwtService, PasswordEncoder passwordEncoder,
+                       com.muster.audit.OpLogService opLogService) {
         this.adminUserMapper = adminUserMapper;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
+        this.opLogService = opLogService;
     }
 
     public LoginResponse login(String username, String password) {
@@ -38,6 +41,7 @@ public class AuthService {
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         adminUserMapper.updateById(user);
+        opLogService.record("PASSWORD_CHANGE", user.getUsername());
     }
 
     private AdminUser findByUsername(String username) {

@@ -22,6 +22,9 @@ public class Team {
 
     private String rejectReason;
 
+    /** 组级能力令牌：报名表单查看/改组时必须携带，防止共享二维码遍历 teamId。 */
+    private String capToken;
+
     private LocalDateTime submittedAt;
 
     private LocalDateTime updatedAt;

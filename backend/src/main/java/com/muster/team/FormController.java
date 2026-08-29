@@ -40,12 +40,14 @@ public class FormController {
 
     @PutMapping("/teams/{teamId}")
     public TeamDetail edit(@PathVariable String token, @PathVariable Long teamId,
+                           @org.springframework.web.bind.annotation.RequestParam(required = false) String cap,
                            @Valid @RequestBody TeamSubmitRequest request) {
-        return teamService.editByLeader(token, teamId, request);
+        return teamService.editByLeader(token, teamId, cap, request);
     }
 
     @GetMapping("/teams/{teamId}")
-    public TeamDetail team(@PathVariable String token, @PathVariable Long teamId) {
-        return teamService.teamDetail(token, teamId);
+    public TeamDetail team(@PathVariable String token, @PathVariable Long teamId,
+                           @org.springframework.web.bind.annotation.RequestParam(required = false) String cap) {
+        return teamService.teamDetail(token, teamId, cap);
     }
 }

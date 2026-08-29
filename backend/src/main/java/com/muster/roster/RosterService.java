@@ -6,6 +6,7 @@ import com.muster.activity.Activity;
 import com.muster.activity.ActivityService;
 import com.muster.common.ApiException;
 import com.muster.common.ErrorCode;
+import com.muster.common.PageParams;
 import com.muster.common.PageResult;
 import com.muster.common.PhoneValidator;
 import com.muster.roster.dto.PersonCreateRequest;
@@ -89,7 +90,8 @@ public class RosterService {
                     .or().like(Person::getPhone, kw)
                     .or().like(Person::getDepartment, kw));
         }
-        Page<Person> result = personMapper.selectPage(Page.of(page, size), wrapper);
+        PageParams pp = PageParams.clamp(page, size);
+        Page<Person> result = personMapper.selectPage(Page.of(pp.page(), pp.size()), wrapper);
         List<PersonResponse> records = result.getRecords().stream().map(PersonResponse::from).toList();
         return new PageResult<>(result.getTotal(), records);
     }

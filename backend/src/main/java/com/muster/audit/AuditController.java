@@ -3,6 +3,7 @@ package com.muster.audit;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.muster.audit.dto.OpLogView;
+import com.muster.common.PageParams;
 import com.muster.common.PageResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +31,8 @@ public class AuditController {
         if (action != null && !action.isBlank()) {
             wrapper.eq(OpLog::getAction, action.trim().toUpperCase());
         }
-        Page<OpLog> result = opLogMapper.selectPage(Page.of(page, size), wrapper);
+        PageParams pp = PageParams.clamp(page, size);
+        Page<OpLog> result = opLogMapper.selectPage(Page.of(pp.page(), pp.size()), wrapper);
         List<OpLogView> records = result.getRecords().stream()
                 .map(l -> new OpLogView(l.getId(), l.getAdminUsername(), l.getAction(), l.getDetail(), l.getCreatedAt()))
                 .toList();

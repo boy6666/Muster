@@ -55,6 +55,30 @@ public class GlobalExceptionHandler {
         return body(400, ErrorCode.VALIDATION.name(), "文件不是有效的 Excel 文件");
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParam(
+            org.springframework.web.bind.MissingServletRequestParameterException e) {
+        return body(400, ErrorCode.VALIDATION.name(), "缺少参数：" + e.getParameterName());
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        return body(400, ErrorCode.VALIDATION.name(), "参数格式不正确：" + e.getName());
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(
+            org.springframework.web.servlet.resource.NoResourceFoundException e) {
+        return body(404, ErrorCode.NOT_FOUND.name(), "接口不存在");
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException e) {
+        return body(405, "METHOD_NOT_ALLOWED", "请求方法不支持");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnknown(Exception e) {
         log.error("未处理异常", e);

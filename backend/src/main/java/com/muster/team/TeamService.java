@@ -7,6 +7,7 @@ import com.muster.activity.Activity;
 import com.muster.activity.ActivityService;
 import com.muster.common.ApiException;
 import com.muster.common.ErrorCode;
+import com.muster.common.PageParams;
 import com.muster.common.PageResult;
 import com.muster.common.PhoneValidator;
 import com.muster.roster.Person;
@@ -165,9 +166,10 @@ public class TeamService {
         throw new ApiException(ErrorCode.CONFLICT, "以下成员已在其他组：" + summary, views);
     }
 
-    public TeamDetail teamDetail(String token, Long teamId) {
+    public TeamDetail teamDetail(String token, Long teamId, String cap) {
         Activity activity = requireActivityByToken(token);
         Team team = requireTeamOfActivity(teamId, activity.getId());
+        requireCap(team, cap);
         return detail(team);
     }
 
@@ -178,12 +180,13 @@ public class TeamService {
         return detail(team);
     }
 
-    /** 组长编辑：窗口内才可改，整体替换成员，状态重置为 PENDING 并清空驳回理由。 */
+    /** 组长编辑：窗口内才可改，整体替换成员，状态重置为 PENDING 并清空驳回理由。需携带提交时发放的 capToken。 */
     @Transactional
-    public TeamDetail editByLeader(String token, Long teamId, TeamSubmitRequest request) {
+    public TeamDetail editByLeader(String token, Long teamId, String cap, TeamSubmitRequest request) {
         Activity activity = requireActivityByToken(token);
         requireActiveWindow(activity);
         Team team = requireTeamOfActivity(teamId, activity.getId());
+        requireCap(team, cap);
         return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "PENDING",
                 "EDITED_BY_LEADER");
     }
@@ -249,7 +252,8 @@ public class TeamService {
         if (status != null && !status.isBlank()) {
             wrapper.eq(Team::getStatus, status.trim().toUpperCase());
         }
-        Page<Team> result = teamMapper.selectPage(Page.of(page, size), wrapper);
+        PageParams pp = PageParams.clamp(page, size);
+        Page<Team> result = teamMapper.selectPage(Page.of(pp.page(), pp.size()), wrapper);
         List<TeamAdminResponse> records = result.getRecords().stream()
                 .map(team -> toAdminResponse(activity, team)).toList();
         return new PageResult<>(result.getTotal(), records);
@@ -291,11 +295,16 @@ public class TeamService {
 
         teamMemberMapper.delete(new LambdaQueryWrapper<TeamMember>().eq(TeamMember::getTeamId, team.getId()));
         for (String phone : phones) {
-            TeamMember membership = new TeamMember();
-            membership.setTeamId(team.getId());
-            membership.setPersonId(roster.get(phone).getId());
-            membership.setCreatedAt(LocalDateTime.now(clock));
-            teamMemberMapper.insert(membership);
+            try {
+                TeamMember membership = new TeamMember();
+                membership.setTeamId(team.getId());
+                membership.setPersonId(roster.get(phone).getId());
+                membership.setCreatedAt(LocalDateTime.now(clock));
+                teamMemberMapper.insert(membership);
+            } catch (DuplicateKeyException e) {
+                // 校验和插入之间成员被其他组抢走（check-then-act 竞态），与提交路径同样返回 409
+                throw new ApiException(ErrorCode.CONFLICT, "有人刚被其他组报走，请刷新后重试");
+            }
         }
         teamMapper.update(null, new LambdaUpdateWrapper<Team>()
                 .eq(Team::getId, team.getId())
@@ -315,6 +324,13 @@ public class TeamService {
         return team;
     }
 
+    /** 二维码 token 是共享的；组级操作必须再校验提交时发放的 capToken，不匹配按 404 处理（不泄露组是否存在）。 */
+    private void requireCap(Team team, String cap) {
+        if (team.getCapToken() == null || cap == null || !cap.equals(team.getCapToken())) {
+            throw new ApiException(ErrorCode.NOT_FOUND, "报名信息不存在");
+        }
+    }
+
     public TeamDetail detail(Team team) {
         Activity activity = activityService.requireCurrent();
         List<TeamMember> memberships = teamMemberMapper.selectList(new LambdaQueryWrapper<TeamMember>()
@@ -326,11 +342,15 @@ public class TeamService {
                 .collect(Collectors.toMap(Person::getId, Function.identity()));
         List<TeamMemberView> members = memberships.stream().map(m -> {
             Person person = persons.get(m.getPersonId());
+            if (person == null) {
+                // 历史库无外键时可能残留孤儿成员行（人员已被删），占位兜底避免详情 500
+                return new TeamMemberView("（已删除成员）", "", "");
+            }
             return new TeamMemberView(person.getName(), person.getPhone(), person.getDepartment());
         }).toList();
         boolean overLimit = members.size() > activity.getGroupSizeLimit();
         return new TeamDetail(team.getId(), team.getName(), team.getStatus(), team.getRejectReason(),
-                overLimit, team.getSubmittedAt(), members);
+                team.getCapToken(), overLimit, team.getSubmittedAt(), members);
     }
 
     Team insertTeamWithRetry(Activity activity) {
@@ -339,8 +359,11 @@ public class TeamService {
                     .eq(Team::getActivityId, activity.getId()));
             Team team = new Team();
             team.setActivityId(activity.getId());
-            team.setName("组" + (count + 1));
+            // 乐观基数 + 重试序号：REPEATABLE READ 下重试读到的是同一快照，
+            // 若仍按 count+1 计算会三次撞同一个名字（uk_activity_name 唯一键兜底）。
+            team.setName("组" + (count + 1 + attempt));
             team.setStatus("PENDING");
+            team.setCapToken(java.util.UUID.randomUUID().toString());
             team.setSubmittedAt(LocalDateTime.now(clock));
             try {
                 teamMapper.insert(team);

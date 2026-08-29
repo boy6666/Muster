@@ -33,17 +33,23 @@ CREATE TABLE IF NOT EXISTS team (
   name VARCHAR(20) NOT NULL,
   status VARCHAR(10) NOT NULL DEFAULT 'PENDING',
   reject_reason VARCHAR(200) NULL,
+  cap_token VARCHAR(36) NULL,
   submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_activity_name (activity_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 历史库补齐组级能力令牌（schema.sql 每次启动都会执行，幂等）
+UPDATE team SET cap_token = REPLACE(UUID(), '-', '') WHERE cap_token IS NULL;
 
 CREATE TABLE IF NOT EXISTS team_member (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   team_id BIGINT NOT NULL,
   person_id BIGINT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_person (person_id)
+  UNIQUE KEY uk_person (person_id),
+  CONSTRAINT fk_member_team FOREIGN KEY (team_id) REFERENCES team (id) ON DELETE CASCADE,
+  CONSTRAINT fk_member_person FOREIGN KEY (person_id) REFERENCES person (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS op_log (

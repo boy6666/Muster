@@ -16,6 +16,8 @@ class TeamReviewFlowIT extends IntegrationTestBase {
     private String formToken;
     private Long team1;
     private Long team2;
+    private String cap1;
+    private String cap2;
 
     @BeforeEach
     void setup() throws Exception {
@@ -38,22 +40,25 @@ class TeamReviewFlowIT extends IntegrationTestBase {
         var first = postJson("/api/form/" + formToken + "/teams",
                 Map.of("memberPhoneList", List.of("13800000001", "13800000002", "13800000003")));
         team1 = json(first.getBody()).path("id").asLong();
+        cap1 = json(first.getBody()).path("capToken").asText();
         var second = postJson("/api/form/" + formToken + "/teams",
                 Map.of("memberPhoneList", List.of("13800000006", "13800000007")));
         team2 = json(second.getBody()).path("id").asLong();
+        cap2 = json(second.getBody()).path("capToken").asText();
     }
 
     private com.fasterxml.jackson.databind.JsonNode json(String body) throws Exception {
         return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body);
     }
 
-    private ResponseEntity<String> leaderEdit(Long teamId, List<String> phones) {
-        return putJson("/api/form/" + formToken + "/teams/" + teamId, Map.of("memberPhoneList", phones));
+    private ResponseEntity<String> leaderEdit(Long teamId, String cap, List<String> phones) {
+        return putJson("/api/form/" + formToken + "/teams/" + teamId + "?cap=" + cap,
+                Map.of("memberPhoneList", phones));
     }
 
     @Test
     void leaderEditReplacesMembersAndKeepsPending() {
-        var resp = leaderEdit(team1, List.of("13800000003", "13800000004", "13800000005"));
+        var resp = leaderEdit(team1, cap1, List.of("13800000003", "13800000004", "13800000005"));
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getBody())
                 .contains("\"status\":\"PENDING\"")
@@ -61,20 +66,20 @@ class TeamReviewFlowIT extends IntegrationTestBase {
                 .contains("13800000005")
                 .doesNotContain("13800000001");
 
-        var other = getJson("/api/form/" + formToken + "/teams/" + team2);
+        var other = getJson("/api/form/" + formToken + "/teams/" + team2 + "?cap=" + cap2);
         assertThat(other.getBody()).contains("13800000006").contains("13800000007");
     }
 
     @Test
     void leaderEditWithPersonInOtherTeamConflicts() {
-        var resp = leaderEdit(team1, List.of("13800000001", "13800000006"));
+        var resp = leaderEdit(team1, cap1, List.of("13800000001", "13800000006"));
         assertThat(resp.getStatusCode().value()).isEqualTo(409);
         assertThat(resp.getBody()).contains("CONFLICT").contains("组2");
     }
 
     @Test
     void leaderEditKeepingOwnMembersSucceeds() {
-        var resp = leaderEdit(team1, List.of("13800000001", "13800000002", "13800000003", "13800000004"));
+        var resp = leaderEdit(team1, cap1, List.of("13800000001", "13800000002", "13800000003", "13800000004"));
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getBody()).contains("\"status\":\"PENDING\"");
     }
@@ -109,7 +114,7 @@ class TeamReviewFlowIT extends IntegrationTestBase {
     void leaderEditAfterRejectionBackToPendingAndClearsReason() {
         putJson("/api/teams/" + team1 + "/review", Map.of("action", "REJECT", "reason", "名单有误"));
 
-        var resp = leaderEdit(team1, List.of("13800000001", "13800000002"));
+        var resp = leaderEdit(team1, cap1, List.of("13800000001", "13800000002"));
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getBody())
                 .contains("\"status\":\"PENDING\"")
@@ -128,7 +133,7 @@ class TeamReviewFlowIT extends IntegrationTestBase {
     void editsBlockedAfterWindowEndsButReviewStillWorks() {
         jdbc.update("UPDATE activity SET manually_ended = 1");
 
-        var leaderBlocked = leaderEdit(team1, List.of("13800000001"));
+        var leaderBlocked = leaderEdit(team1, cap1, List.of("13800000001"));
         assertThat(leaderBlocked.getStatusCode().value()).isEqualTo(409);
         assertThat(leaderBlocked.getBody()).contains("WINDOW_CLOSED");
 
@@ -160,7 +165,7 @@ class TeamReviewFlowIT extends IntegrationTestBase {
         Integer before = jdbc.queryForObject("SELECT COUNT(*) FROM team_member", Integer.class);
         assertThat(before).isEqualTo(5);
 
-        leaderEdit(team1, List.of("13800000002", "13800000003"));
+        leaderEdit(team1, cap1, List.of("13800000002", "13800000003"));
 
         Integer after = jdbc.queryForObject("SELECT COUNT(*) FROM team_member", Integer.class);
         assertThat(after).isEqualTo(4);

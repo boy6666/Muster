@@ -4,7 +4,7 @@
 
 - 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3 + Element Plus（管理端）+ Vant（移动 H5）· Docker
 - 接口文档：[`docs/api.md`](docs/api.md)
-- 后端：`backend/`　|　前端：`frontend/`　|　部署：`deploy/`（建设中）
+- 后端：`backend/`　|　前端：`frontend/`　|　部署：`deploy/`
 
 ## 核心玩法
 
@@ -42,13 +42,30 @@ npm run dev          # 开发服务器 http://localhost:5173，/api 与 /ws 代�
 ## 测试
 
 ```bash
-# 后端（81 个用例，Testcontainers 需要本机 Docker）
+# 后端（89 个用例，Testcontainers 需要本机 Docker）
 cd backend && mvn test
 
 # 前端（41 个用例，Vitest + jsdom，无需后端）
 cd frontend && npm test
 ```
 
-## 部署（建设中）
+## 部署（Docker Compose）
 
-计划提供 `deploy/` 下 docker-compose（app + MySQL），并通过 Cloudflare 代理的自有域名对外发布。
+```bash
+cd deploy
+cp .env.example .env      # 必改：DB_PASSWORD、JWT_SECRET；按需改 FORM_BASE_URL、HTTP_PORT
+docker compose up -d --build
+```
+
+- 架构：`mysql:8`（named volume `mysql-data` 存数据，healthcheck 就绪后才启动后端）+ `backend`（Spring Boot jar）+ `frontend`（nginx 托管静态资源并反代 `/api`、`/ws`）
+- 访问：`http://<主机>:${HTTP_PORT:-80}/` 进入管理后台；报名表单地址为 `FORM_BASE_URL/form/<二维码token>`（外网部署时把 `FORM_BASE_URL` 设为 Cloudflare 代理的域名，如 `https://muster.example.com`）
+- 默认管理员 `admin / admin123`，**首次登录后请立即在右上角「修改密码」中更改**
+- 常用命令：
+
+```bash
+docker compose logs -f backend    # 后端日志
+docker compose ps                 # 状态
+docker compose down               # 停止（数据保留在 mysql-data 卷）
+```
+
+首次启动后端会自动建表（schema.sql 幂等）并创建默认管理员。详细说明见 [`deploy/README.md`](deploy/README.md)。

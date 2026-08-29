@@ -21,6 +21,7 @@ cd backend && mvn spring-boot:run   # 本地运行 :8080（需 MySQL 8，schema 
 6. **超上限不拦截**：人数超过 `groupSizeLimit` 允许提交，仅打 `overLimit` 标记（前端负责提示）。
 7. **花名册锁定活动**：Excel 导入/网页增删均挂在当前活动下；活动运行中允许增删。
 8. **表单自动回显仅精确手机号**：`GET /api/form/{token}/person?phone=` 必须是完整 11 位才查询，不做模糊搜索（防止扫库）。
+9. **组级能力令牌**：二维码 token 全体共享，组详情/改组必须携带提交时发放的 `capToken`（`?cap=`），不匹配按 404 处理（不泄露组是否存在）；分页参数统一走 `PageParams.clamp`（page≥1、1≤size≤200）。
 
 ## 代码约定
 

@@ -42,9 +42,11 @@
 |---|---|---|
 | GET | `/api/form/{token}` | 活动信息 `{name,startTime,endTime,groupSizeLimit,windowStatus}` |
 | GET | `/api/form/{token}/person?phone=` | 手机号自动回显 `{name,phone,department}`；**仅完整 11 位手机号精确查询**（部分输入 → 400） |
-| POST | `/api/form/{token}/teams` | 组长提交 `{memberPhoneList:[...]}` → TeamDetail；一人一组，冲突 → 409 带 `data` 冲突明细；超上限允许（`overLimit:true`） |
-| GET | `/api/form/{token}/teams/{teamId}` | 查看本组 |
-| PUT | `/api/form/{token}/teams/{teamId}` | 组长改组（仅 ACTIVE）→ 状态回 PENDING、清驳回理由 |
+| POST | `/api/form/{token}/teams` | 组长提交 `{memberPhoneList:[...]}` → TeamDetail（含 `capToken`）；一人一组，冲突 → 409 带 `data` 冲突明细；超上限允许（`overLimit:true`） |
+| GET | `/api/form/{token}/teams/{teamId}?cap=` | 查看本组；`cap` 必须为提交时发放的 `capToken`，不匹配按 404 处理（不泄露组是否存在） |
+| PUT | `/api/form/{token}/teams/{teamId}?cap=` | 组长改组（仅 ACTIVE）→ 状态回 PENDING、清驳回理由；`cap` 同上 |
+
+> **capToken**：二维码 token 对所有参与者共享，组级能力由提交时发放的 `capToken`（UUID）承载。前端将 `{teamId, cap}` 存 localStorage，后续查看/改组请求必须携带 `?cap=`。
 
 ## 组管理 `/api/teams`（需登录）
 
@@ -68,7 +70,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/audit/logs?action=&page=&size=` | 管理操作审计日志（建/改/删/结束/归档活动、花名册导入增删、管理员改组、审核），按 id 倒序分页 |
+| GET | `/api/audit/logs?action=&page=&size=` | 管理操作审计日志（建/改/删/结束/归档活动、花名册导入增删、管理员改组、审核、修改密码 `PASSWORD_CHANGE`），按 id 倒序分页 |
 | GET | `/api/teams/{id}/events` | 组生命周期流水，时间正序：`SUBMITTED`/`EDITED_BY_LEADER`/`EDITED_BY_ADMIN`/`PASSED`/`REJECTED`（驳回带理由） |
 
 ## WebSocket `/ws/stats`（匿名握手但需校验）
@@ -79,12 +81,13 @@
 
 | code | HTTP | 场景 |
 |---|---|---|
-| VALIDATION | 400 | 参数/格式/部分手机号查询 |
+| VALIDATION | 400 | 参数/格式/部分手机号查询；缺少必填参数、参数类型不正确也归 400 |
 | UNAUTHORIZED | 401 | 未登录 |
 | AUTH_FAILED | 401 | 账号或密码错误 |
 | FORBIDDEN | 403 | — |
-| NOT_FOUND | 404 | 无活动/无效二维码 |
+| NOT_FOUND | 404 | 无活动/无效二维码；未知路径；capToken 不匹配的组查询 |
 | PERSON_NOT_FOUND | 404 | 手机号不在花名册 |
+| METHOD_NOT_ALLOWED | 405 | 请求方法不支持 |
 | CONFLICT | 409 | 已结束重复操作/一人多组（data 含冲突明细） |
 | ARCHIVE_REQUIRED | 409 | 未归档先建/删 |
 | WINDOW_CLOSED | 409 | 活动未开始或已结束时的编辑类操作 |

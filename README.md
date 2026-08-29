@@ -2,9 +2,9 @@
 
 校园活动分组报名系统：严格单活动、花名册 Excel 导入、扫码报名（组长统一提交）、全部人工审核、实时统计（WebSocket 推送）、xlsx 导出与归档。
 
-- 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3（建设中）· Docker（建设中）
+- 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3 + Element Plus（管理端）+ Vant（移动 H5）· Docker
 - 接口文档：[`docs/api.md`](docs/api.md)
-- 后端：`backend/`　|　前端：`frontend/`（建设中）　|　部署：`deploy/`（建设中）
+- 后端：`backend/`　|　前端：`frontend/`　|　部署：`deploy/`（建设中）
 
 ## 核心玩法
 
@@ -23,16 +23,31 @@ mvn spring-boot:run
 ```
 
 - 服务端口：`8080`
-- 默认管理员：`admin / admin123`（首次启动自动创建）
+- 默认管理员：`admin / admin123`（首次启动自动创建，请登录后立即修改密码）
 - 环境变量：`DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / JWT_SECRET / FORM_BASE_URL`
+- ⚠️ 生产部署必须设置随机 `JWT_SECRET`（未设置时后端会打印启动警告，令牌存在被伪造风险）
+
+## 前端本地运行
+
+```bash
+cd frontend
+npm install
+npm run dev          # 开发服务器 http://localhost:5173，/api 与 /ws 代理到 localhost:8080
+```
+
+- 生产构建：`npm run build`（产物在 `frontend/dist/`）
+- 类型检查：`npm run typecheck`
+- 页面：`/login` 登录；`/admin/home` 实时统计与导出；`/admin/activity` 活动管理与二维码；`/admin/roster` 花名册；`/admin/teams` 组审核；`/admin/audit` 审计日志；`/form/:token` 手机端报名 H5
 
 ## 测试
 
 ```bash
+# 后端（81 个用例，Testcontainers 需要本机 Docker）
 cd backend && mvn test
-```
 
-81 个用例（单元 + 集成）。集成测试使用 Testcontainers 自动拉起 MySQL 8 容器，需要本机 Docker。
+# 前端（41 个用例，Vitest + jsdom，无需后端）
+cd frontend && npm test
+```
 
 ## 部署（建设中）
 

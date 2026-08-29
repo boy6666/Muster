@@ -1,15 +1,20 @@
 package com.muster.team;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.muster.activity.Activity;
 import com.muster.activity.ActivityService;
 import com.muster.common.ApiException;
 import com.muster.common.ErrorCode;
+import com.muster.common.PageResult;
 import com.muster.common.PhoneValidator;
 import com.muster.roster.Person;
 import com.muster.roster.PersonMapper;
 import com.muster.team.dto.ConflictView;
 import com.muster.team.dto.FormInfo;
+import com.muster.team.dto.ReviewRequest;
+import com.muster.team.dto.TeamAdminResponse;
 import com.muster.team.dto.TeamDetail;
 import com.muster.team.dto.TeamMemberView;
 import com.muster.team.dto.TeamSubmitRequest;
@@ -130,11 +135,131 @@ public class TeamService {
 
     public TeamDetail teamDetail(String token, Long teamId) {
         Activity activity = requireActivityByToken(token);
-        Team team = teamMapper.selectById(teamId);
-        if (team == null || !team.getActivityId().equals(activity.getId())) {
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        return detail(team);
+    }
+
+    /** 管理端组详情。 */
+    public TeamDetail teamDetailById(Long teamId) {
+        Activity activity = activityService.requireCurrent();
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        return detail(team);
+    }
+
+    /** 组长编辑：窗口内才可改，整体替换成员，状态重置为 PENDING 并清空驳回理由。 */
+    @Transactional
+    public TeamDetail editByLeader(String token, Long teamId, TeamSubmitRequest request) {
+        Activity activity = requireActivityByToken(token);
+        requireActiveWindow(activity);
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "PENDING");
+    }
+
+    /** 管理员编辑：同样窗口限制，但状态直接置 CONFIRMED。 */
+    @Transactional
+    public TeamDetail editByAdmin(Long teamId, TeamSubmitRequest request) {
+        Activity activity = activityService.requireCurrent();
+        requireActiveWindow(activity);
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "CONFIRMED");
+    }
+
+    /** 人工审核：不受窗口限制。PASS → CONFIRMED；REJECT → REJECTED 且必须带理由。 */
+    @Transactional
+    public void review(Long teamId, ReviewRequest request) {
+        Activity activity = activityService.requireCurrent();
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        if ("PASS".equalsIgnoreCase(request.action())) {
+            teamMapper.update(null, new LambdaUpdateWrapper<Team>()
+                    .eq(Team::getId, teamId)
+                    .set(Team::getStatus, "CONFIRMED")
+                    .set(Team::getRejectReason, null)
+                    .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
+        } else if ("REJECT".equalsIgnoreCase(request.action())) {
+            if (request.reason() == null || request.reason().isBlank()) {
+                throw new ApiException(ErrorCode.VALIDATION, "驳回必须填写理由");
+            }
+            teamMapper.update(null, new LambdaUpdateWrapper<Team>()
+                    .eq(Team::getId, teamId)
+                    .set(Team::getStatus, "REJECTED")
+                    .set(Team::getRejectReason, request.reason().trim())
+                    .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
+        } else {
+            throw new ApiException(ErrorCode.VALIDATION, "action 必须为 PASS 或 REJECT");
+        }
+        eventPublisher.publishEvent(new StatsChangedEvent(activity.getId()));
+    }
+
+    public PageResult<TeamAdminResponse> page(String status, int page, int size) {
+        Activity activity = activityService.requireCurrent();
+        LambdaQueryWrapper<Team> wrapper = new LambdaQueryWrapper<Team>()
+                .eq(Team::getActivityId, activity.getId())
+                .orderByAsc(Team::getId);
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(Team::getStatus, status.trim().toUpperCase());
+        }
+        Page<Team> result = teamMapper.selectPage(Page.of(page, size), wrapper);
+        List<TeamAdminResponse> records = result.getRecords().stream()
+                .map(team -> toAdminResponse(activity, team)).toList();
+        return new PageResult<>(result.getTotal(), records);
+    }
+
+    private TeamAdminResponse toAdminResponse(Activity activity, Team team) {
+        int memberCount = Math.toIntExact(teamMemberMapper.selectCount(
+                new LambdaQueryWrapper<TeamMember>().eq(TeamMember::getTeamId, team.getId())));
+        return new TeamAdminResponse(team.getId(), team.getName(), team.getStatus(), memberCount,
+                memberCount > activity.getGroupSizeLimit(), team.getRejectReason(), team.getSubmittedAt());
+    }
+
+    private TeamDetail replaceMembers(Activity activity, Team team, List<String> rawPhones, String newStatus) {
+        List<String> phones = rawPhones == null ? List.of() : rawPhones.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(p -> !p.isEmpty())
+                .distinct()
+                .toList();
+        if (phones.isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION, "请至少选择一名成员");
+        }
+        for (String phone : phones) {
+            if (!PhoneValidator.valid(phone)) {
+                throw new ApiException(ErrorCode.VALIDATION, "手机号格式不正确：" + phone);
+            }
+        }
+        Map<String, Person> roster = personMapper.selectList(new LambdaQueryWrapper<Person>()
+                        .eq(Person::getActivityId, activity.getId())
+                        .in(Person::getPhone, phones)).stream()
+                .collect(Collectors.toMap(Person::getPhone, Function.identity()));
+        for (String phone : phones) {
+            if (!roster.containsKey(phone)) {
+                throw new ApiException(ErrorCode.PERSON_NOT_FOUND, "未在花名册中：" + phone);
+            }
+        }
+        checkConflicts(activity, roster, phones, team.getId());
+
+        teamMemberMapper.delete(new LambdaQueryWrapper<TeamMember>().eq(TeamMember::getTeamId, team.getId()));
+        for (String phone : phones) {
+            TeamMember membership = new TeamMember();
+            membership.setTeamId(team.getId());
+            membership.setPersonId(roster.get(phone).getId());
+            membership.setCreatedAt(LocalDateTime.now(clock));
+            teamMemberMapper.insert(membership);
+        }
+        teamMapper.update(null, new LambdaUpdateWrapper<Team>()
+                .eq(Team::getId, team.getId())
+                .set(Team::getStatus, newStatus)
+                .set(Team::getRejectReason, null)
+                .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
+        eventPublisher.publishEvent(new StatsChangedEvent(activity.getId()));
+        return detail(requireTeamOfActivity(team.getId(), activity.getId()));
+    }
+
+    private Team requireTeamOfActivity(Long teamId, Long activityId) {
+        Team team = teamId == null ? null : teamMapper.selectById(teamId);
+        if (team == null || !team.getActivityId().equals(activityId)) {
             throw new ApiException(ErrorCode.NOT_FOUND, "组不存在");
         }
-        return detail(team);
+        return team;
     }
 
     public TeamDetail detail(Team team) {

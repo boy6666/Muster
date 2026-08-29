@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,6 +30,12 @@ public class FormController {
     @PostMapping("/teams")
     public TeamDetail submit(@PathVariable String token, @Valid @RequestBody TeamSubmitRequest request) {
         return teamService.submit(token, request);
+    }
+
+    @PutMapping("/teams/{teamId}")
+    public TeamDetail edit(@PathVariable String token, @PathVariable Long teamId,
+                           @Valid @RequestBody TeamSubmitRequest request) {
+        return teamService.editByLeader(token, teamId, request);
     }
 
     @GetMapping("/teams/{teamId}")

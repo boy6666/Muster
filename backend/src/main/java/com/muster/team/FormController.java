@@ -27,6 +27,12 @@ public class FormController {
         return teamService.formInfo(token);
     }
 
+    @GetMapping("/person")
+    public com.muster.team.dto.FormPersonView person(@PathVariable String token,
+                                                     @org.springframework.web.bind.annotation.RequestParam String phone) {
+        return teamService.personByPhone(token, phone);
+    }
+
     @PostMapping("/teams")
     public TeamDetail submit(@PathVariable String token, @Valid @RequestBody TeamSubmitRequest request) {
         return teamService.submit(token, request);

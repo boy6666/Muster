@@ -57,6 +57,21 @@ public class TeamService {
                 activity.getGroupSizeLimit(), window(activity).name());
     }
 
+    /** 报名表自动回显：仅允许完整 11 位手机号精确查询，不做模糊搜索。 */
+    public com.muster.team.dto.FormPersonView personByPhone(String token, String phone) {
+        Activity activity = requireActivityByToken(token);
+        if (phone == null || !PhoneValidator.valid(phone.trim())) {
+            throw new ApiException(ErrorCode.VALIDATION, "请输入完整 11 位手机号");
+        }
+        Person person = personMapper.selectOne(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activity.getId())
+                .eq(Person::getPhone, phone.trim()));
+        if (person == null) {
+            throw new ApiException(ErrorCode.PERSON_NOT_FOUND, "该手机号不在花名册中");
+        }
+        return new com.muster.team.dto.FormPersonView(person.getName(), person.getPhone(), person.getDepartment());
+    }
+
     @Transactional
     public TeamDetail submit(String token, TeamSubmitRequest request) {
         Activity activity = requireActivityByToken(token);

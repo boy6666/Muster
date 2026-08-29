@@ -56,6 +56,37 @@ class TeamSubmitFlowIT extends IntegrationTestBase {
     }
 
     @Test
+    void personLookupByExactPhoneReturnsMemberInfo() {
+        var resp = getJson("/api/form/" + formToken + "/person?phone=13800000002");
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+        assertThat(resp.getBody())
+                .contains("\"name\":\"李四\"")
+                .contains("\"phone\":\"13800000002\"")
+                .contains("\"department\":\"外语\"");
+    }
+
+    @Test
+    void personLookupRejectsPartialPhone() {
+        var resp = getJson("/api/form/" + formToken + "/person?phone=138");
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("VALIDATION");
+    }
+
+    @Test
+    void personLookupUnknownFullPhoneReturns404() {
+        var resp = getJson("/api/form/" + formToken + "/person?phone=13800009999");
+        assertThat(resp.getStatusCode().value()).isEqualTo(404);
+        assertThat(resp.getBody()).contains("PERSON_NOT_FOUND");
+    }
+
+    @Test
+    void personLookupWrongTokenReturns404() {
+        var resp = getJson("/api/form/not-a-real-token/person?phone=13800000002");
+        assertThat(resp.getStatusCode().value()).isEqualTo(404);
+        assertThat(resp.getBody()).contains("NOT_FOUND");
+    }
+
+    @Test
     void submitCreatesPendingTeamWithThreeMembers() {
         var resp = submit(List.of("13800000001", "13800000002", "13800000003"));
         assertThat(resp.getStatusCode().value()).isEqualTo(200);

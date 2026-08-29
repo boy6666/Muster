@@ -13,6 +13,7 @@ export const router = createRouter({
         { path: '', redirect: '/admin/home' },
         { path: 'home', component: () => import('./views/HomeView.vue') },
         { path: 'activity', component: () => import('./views/ActivityView.vue') },
+        { path: 'roster', component: () => import('./views/RosterView.vue') },
       ],
     },
     { path: '/form/:token', component: () => import('./views/FormView.vue') },

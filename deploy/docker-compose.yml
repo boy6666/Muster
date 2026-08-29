@@ -1,6 +1,8 @@
 services:
   mysql:
     image: mysql:8
+    ports:
+      - "127.0.0.1:3307:3306"   # Navicat 等本机客户端连接用；3306 已被同机 hotel-mysql 占用，仅绑本机不暴露公网
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?请在 deploy/.env 中设置 DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME:-muster}

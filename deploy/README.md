@@ -15,26 +15,33 @@ docker compose up -d --build
 
 **升级注意**：schema.sql 只做 `CREATE TABLE IF NOT EXISTS`，不会对已存在的表补列。跨大版本升级（如旧库缺 `team.cap_token` 列）需先执行 `docker compose down -v` 重建卷或手工 `ALTER TABLE`。
 
-## 服务器部署（云主机 / VPS）
+## 服务器部署（Windows 10 / Linux 均可）
 
-仓库为公开仓库，服务器上无需凭证即可拉取：
+Windows 服务器：装好 Docker Desktop（酒店系统已在用即装好）+ git；Linux：`curl -fsSL https://get.docker.com | sh`。仓库为公开仓库，无需凭证：
 
 ```bash
-# 1. 安装 Docker（Ubuntu/Debian 为例，其他发行版见 docs.docker.com）
-curl -fsSL https://get.docker.com | sh
+# 1. 拉代码（Win10 用 PowerShell / Git Bash 均可）
+git clone https://github.com/boy6666/Muster.git
+cd Muster/deploy
 
-# 2. 拉代码
-git clone https://github.com/boy6666/Muster.git && cd Muster/deploy
-
-# 3. 配置
+# 2. 配置
 cp .env.example .env
-#   DB_PASSWORD / JWT_SECRET 必改：openssl rand -hex 32 各生成一个
+#   DB_PASSWORD / JWT_SECRET 必改：openssl rand -hex 32 各生成一个（Git Bash）或任意强随机串
 #   FORM_BASE_URL 填参与者扫码访问的公网地址，如 https://muster.wyc.best/
-#   走 Tunnel 或本机反代时设 BIND_ADDR=127.0.0.1（不对公网开放 8091）
-#   HTTP_PORT 按需（默认 80）
+#   BIND_ADDR=127.0.0.1（走 Tunnel / 本机 nginx，不对公网开放）
+#   HTTP_PORT=8092（3306 被 hotel-mysql 占用无关；前端容器端口，避开 hotel 的 8080/8090）
 
-# 4. 构建并启动（首次构建需拉取 mysql/maven/node/nginx 基镜像，在服务器上构建）
+# 3. 构建并启动（首次构建需拉取 mysql/maven/node/nginx 基镜像）
 docker compose up -d --build
+```
+
+### 本机 nginx 反代（与 hotel.conf 同一套 nginx）
+
+```bash
+# 把仓库里 deploy/nginx-muster.conf 复制为 nginx conf 目录下的 muster.conf，
+# 并在 nginx.conf 的 http{} 末尾 include（和 hotel.conf 那行并排）：
+#   include D:/software/nginx-1.22.0-web/conf/muster.conf;
+# 然后 nginx -t 校验并 (re)load
 ```
 
 ### 对外暴露（二选一）
@@ -59,3 +66,5 @@ docker compose logs -f backend        # 后端日志
 docker compose up -d --build          # 升级（git pull 后执行；数据在 mysql-data 卷，不丢）
 docker compose exec mysql mysqldump -uroot -p"$DB_PASSWORD" muster > backup.sql   # 备份
 ```
+
+**Navicat 连库**：compose 已把 MySQL 映射到主机 `127.0.0.1:3307`（3306 被同机 hotel-mysql 占用）。连接参数：主机 `127.0.0.1`、端口 `3307`、用户 `root`、密码 = `deploy/.env` 的 `DB_PASSWORD`、默认库 `muster`。Navicat 装在另一台电脑上时，用 Navicat 自带的「SSH 通道」先登录服务器、再连 `127.0.0.1:3307`。

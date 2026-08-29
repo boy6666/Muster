@@ -72,4 +72,4 @@ docker compose up -d --build          # 升级（git pull 后执行；数据在 
 docker compose exec mysql mysqldump -uroot -p"$DB_PASSWORD" muster > backup.sql   # 备份
 ```
 
-**Navicat 连库**：compose 已把 MySQL 映射到主机 `127.0.0.1:3307`（3306 被同机 hotel-mysql 占用）。连接参数：主机 `127.0.0.1`、端口 `3307`、用户 `root`、密码 = `deploy/.env` 的 `DB_PASSWORD`、默认库 `muster`。Navicat 装在另一台电脑上时，用 Navicat 自带的「SSH 通道」先登录服务器、再连 `127.0.0.1:3307`。
+**Navicat 连库**：compose 把 MySQL 映射到主机 `127.0.0.1:${DB_HOST_PORT:-3307}`（端口被占用时在 `.env` 改 `DB_HOST_PORT`）。连接参数：主机 `127.0.0.1`、端口 = `DB_HOST_PORT`、用户 `root`、密码 = `deploy/.env` 的 `DB_PASSWORD`、默认库 `muster`。Navicat 装在另一台电脑上时，用 Navicat 自带的「SSH 通道」先登录服务器、再连该端口。

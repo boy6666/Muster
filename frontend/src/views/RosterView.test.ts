@@ -4,12 +4,11 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import MockAdapter from 'axios-mock-adapter'
 import { http, setToken } from '../api/http'
-import { router } from '../router'
 import RosterView from './RosterView.vue'
 
 let mock: MockAdapter
 async function mountView() {
-  const wrapper = mount(RosterView, { global: { plugins: [createPinia(), ElementPlus, router] } })
+  const wrapper = mount(RosterView, { global: { plugins: [createPinia(), ElementPlus] } })
   await flushPromises()
   return wrapper
 }

@@ -36,18 +36,24 @@ public class TeamService {
 
     private final TeamMapper teamMapper;
     private final TeamMemberMapper teamMemberMapper;
+    private final TeamEventMapper teamEventMapper;
     private final PersonMapper personMapper;
     private final ActivityService activityService;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.muster.audit.OpLogService opLogService;
     private final Clock clock;
 
-    public TeamService(TeamMapper teamMapper, TeamMemberMapper teamMemberMapper, PersonMapper personMapper,
-                       ActivityService activityService, ApplicationEventPublisher eventPublisher, Clock clock) {
+    public TeamService(TeamMapper teamMapper, TeamMemberMapper teamMemberMapper, TeamEventMapper teamEventMapper,
+                       PersonMapper personMapper, ActivityService activityService,
+                       ApplicationEventPublisher eventPublisher, com.muster.audit.OpLogService opLogService,
+                       Clock clock) {
         this.teamMapper = teamMapper;
         this.teamMemberMapper = teamMemberMapper;
+        this.teamEventMapper = teamEventMapper;
         this.personMapper = personMapper;
         this.activityService = activityService;
         this.eventPublisher = eventPublisher;
+        this.opLogService = opLogService;
         this.clock = clock;
     }
 
@@ -116,7 +122,18 @@ public class TeamService {
             }
         }
         eventPublisher.publishEvent(new StatsChangedEvent(activity.getId()));
+        insertEvent(team, activity.getId(), "SUBMITTED", "提交 " + phones.size() + " 人");
         return detail(team);
+    }
+
+    private void insertEvent(Team team, Long activityId, String type, String detail) {
+        TeamEvent event = new TeamEvent();
+        event.setTeamId(team.getId());
+        event.setActivityId(activityId);
+        event.setType(type);
+        event.setDetail(detail);
+        event.setCreatedAt(LocalDateTime.now(clock));
+        teamEventMapper.insert(event);
     }
 
     /**
@@ -167,7 +184,8 @@ public class TeamService {
         Activity activity = requireActivityByToken(token);
         requireActiveWindow(activity);
         Team team = requireTeamOfActivity(teamId, activity.getId());
-        return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "PENDING");
+        return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "PENDING",
+                "EDITED_BY_LEADER");
     }
 
     /** 管理员编辑：同样窗口限制，但状态直接置 CONFIRMED。 */
@@ -176,7 +194,10 @@ public class TeamService {
         Activity activity = activityService.requireCurrent();
         requireActiveWindow(activity);
         Team team = requireTeamOfActivity(teamId, activity.getId());
-        return replaceMembers(activity, team, request == null ? null : request.memberPhoneList(), "CONFIRMED");
+        TeamDetail result = replaceMembers(activity, team, request == null ? null : request.memberPhoneList(),
+                "CONFIRMED", "EDITED_BY_ADMIN");
+        opLogService.record("TEAM_EDIT_ADMIN", team.getName());
+        return result;
     }
 
     /** 人工审核：不受窗口限制。PASS → CONFIRMED；REJECT → REJECTED 且必须带理由。 */
@@ -190,6 +211,7 @@ public class TeamService {
                     .set(Team::getStatus, "CONFIRMED")
                     .set(Team::getRejectReason, null)
                     .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
+            insertEvent(team, activity.getId(), "PASSED", null);
         } else if ("REJECT".equalsIgnoreCase(request.action())) {
             if (request.reason() == null || request.reason().isBlank()) {
                 throw new ApiException(ErrorCode.VALIDATION, "驳回必须填写理由");
@@ -199,10 +221,24 @@ public class TeamService {
                     .set(Team::getStatus, "REJECTED")
                     .set(Team::getRejectReason, request.reason().trim())
                     .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
+            insertEvent(team, activity.getId(), "REJECTED", request.reason().trim());
         } else {
             throw new ApiException(ErrorCode.VALIDATION, "action 必须为 PASS 或 REJECT");
         }
+        opLogService.record("TEAM_REVIEW", team.getName() + " " + request.action().toUpperCase()
+                + (request.reason() == null || request.reason().isBlank() ? "" : "：" + request.reason().trim()));
         eventPublisher.publishEvent(new StatsChangedEvent(activity.getId()));
+    }
+
+    /** 组生命周期流水：提交/改组/审核全部按时间正序返回。 */
+    public List<com.muster.team.dto.TeamEventView> events(Long teamId) {
+        Activity activity = activityService.requireCurrent();
+        Team team = requireTeamOfActivity(teamId, activity.getId());
+        return teamEventMapper.selectList(new LambdaQueryWrapper<TeamEvent>()
+                        .eq(TeamEvent::getTeamId, team.getId())
+                        .orderByAsc(TeamEvent::getId)).stream()
+                .map(e -> new com.muster.team.dto.TeamEventView(e.getId(), e.getType(), e.getDetail(), e.getCreatedAt()))
+                .toList();
     }
 
     public PageResult<TeamAdminResponse> page(String status, int page, int size) {
@@ -226,7 +262,8 @@ public class TeamService {
                 memberCount > activity.getGroupSizeLimit(), team.getRejectReason(), team.getSubmittedAt());
     }
 
-    private TeamDetail replaceMembers(Activity activity, Team team, List<String> rawPhones, String newStatus) {
+    private TeamDetail replaceMembers(Activity activity, Team team, List<String> rawPhones, String newStatus,
+                                      String eventType) {
         List<String> phones = rawPhones == null ? List.of() : rawPhones.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
@@ -266,6 +303,7 @@ public class TeamService {
                 .set(Team::getRejectReason, null)
                 .set(Team::getUpdatedAt, LocalDateTime.now(clock)));
         eventPublisher.publishEvent(new StatsChangedEvent(activity.getId()));
+        insertEvent(team, activity.getId(), eventType, "改为 " + phones.size() + " 人");
         return detail(requireTeamOfActivity(team.getId(), activity.getId()));
     }
 

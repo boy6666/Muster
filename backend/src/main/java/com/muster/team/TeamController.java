@@ -38,6 +38,11 @@ public class TeamController {
         return teamService.teamDetailById(id);
     }
 
+    @GetMapping("/{id}/events")
+    public java.util.List<com.muster.team.dto.TeamEventView> events(@PathVariable Long id) {
+        return teamService.events(id);
+    }
+
     @PutMapping("/{id}/review")
     public Map<String, Object> review(@PathVariable Long id, @Valid @RequestBody ReviewRequest request) {
         teamService.review(id, request);

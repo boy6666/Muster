@@ -20,13 +20,16 @@ public class ExportService {
     private final ExportMapper exportMapper;
     private final ExcelService excelService;
     private final com.muster.activity.ActivityMapper activityMapper;
+    private final com.muster.audit.OpLogService opLogService;
 
     public ExportService(ActivityService activityService, ExportMapper exportMapper, ExcelService excelService,
-                         com.muster.activity.ActivityMapper activityMapper) {
+                         com.muster.activity.ActivityMapper activityMapper,
+                         com.muster.audit.OpLogService opLogService) {
         this.activityService = activityService;
         this.exportMapper = exportMapper;
         this.excelService = excelService;
         this.activityMapper = activityMapper;
+        this.opLogService = opLogService;
     }
 
     public byte[] export(String type) {
@@ -49,6 +52,7 @@ public class ExportService {
                 exportMapper.selectArchiveDetail(activity.getId()));
         activity.setExported(true);
         activityMapper.updateById(activity);
+        opLogService.record("ACTIVITY_ARCHIVE", activity.getName());
         return bytes;
     }
 

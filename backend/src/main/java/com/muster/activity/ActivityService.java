@@ -22,13 +22,16 @@ public class ActivityService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final String formBaseUrl;
+    private final com.muster.audit.OpLogService opLogService;
 
     public ActivityService(ActivityMapper activityMapper, JdbcTemplate jdbc, Clock clock,
-                           @Value("${muster.form-base-url}") String formBaseUrl) {
+                           @Value("${muster.form-base-url}") String formBaseUrl,
+                           com.muster.audit.OpLogService opLogService) {
         this.activityMapper = activityMapper;
         this.jdbc = jdbc;
         this.clock = clock;
         this.formBaseUrl = formBaseUrl;
+        this.opLogService = opLogService;
     }
 
     public Activity current() {
@@ -71,6 +74,7 @@ public class ActivityService {
         activity.setQrToken(UUID.randomUUID().toString().replace("-", ""));
         activity.setCreatedAt(LocalDateTime.now(clock));
         activityMapper.insert(activity);
+        opLogService.record("ACTIVITY_CREATE", request.name());
         return activity;
     }
 
@@ -93,6 +97,7 @@ public class ActivityService {
             activity.setGroupSizeLimit(request.groupSizeLimit());
         }
         activityMapper.updateById(activity);
+        opLogService.record("ACTIVITY_UPDATE", activity.getName());
     }
 
     public void end() {
@@ -102,6 +107,7 @@ public class ActivityService {
         }
         activity.setManuallyEnded(true);
         activityMapper.updateById(activity);
+        opLogService.record("ACTIVITY_END", activity.getName());
     }
 
     @Transactional
@@ -113,8 +119,10 @@ public class ActivityService {
         jdbc.update("DELETE FROM team_member WHERE team_id IN (SELECT id FROM team WHERE activity_id = ?)",
                 activity.getId());
         jdbc.update("DELETE FROM team WHERE activity_id = ?", activity.getId());
+        jdbc.update("DELETE FROM team_event WHERE activity_id = ?", activity.getId());
         jdbc.update("DELETE FROM person WHERE activity_id = ?", activity.getId());
         activityMapper.deleteById(activity.getId());
+        opLogService.record("ACTIVITY_DELETE", activity.getName());
     }
 
     public String formUrl(Activity activity) {

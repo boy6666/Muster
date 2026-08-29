@@ -30,14 +30,16 @@ public class RosterService {
     private final ExcelService excelService;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final com.muster.audit.OpLogService opLogService;
 
     public RosterService(PersonMapper personMapper, ActivityService activityService, ExcelService excelService,
-                         JdbcTemplate jdbc, Clock clock) {
+                         JdbcTemplate jdbc, Clock clock, com.muster.audit.OpLogService opLogService) {
         this.personMapper = personMapper;
         this.activityService = activityService;
         this.excelService = excelService;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.opLogService = opLogService;
     }
 
     @Transactional
@@ -72,6 +74,7 @@ public class RosterService {
         for (PersonRow row : rows) {
             insert(activity.getId(), row.name(), row.phone(), row.department());
         }
+        opLogService.record("ROSTER_IMPORT", "导入 " + rows.size() + " 人");
         return rows.size();
     }
 
@@ -101,6 +104,7 @@ public class RosterService {
             throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
         }
         Person person = insert(activity.getId(), request.name().trim(), phone, request.department().trim());
+        opLogService.record("ROSTER_ADD", request.name().trim() + " " + phone);
         return PersonResponse.from(person);
     }
 
@@ -113,6 +117,7 @@ public class RosterService {
         }
         jdbc.update("DELETE FROM team_member WHERE person_id = ?", personId);
         personMapper.deleteById(personId);
+        opLogService.record("ROSTER_DELETE", person.getName() + " " + person.getPhone());
     }
 
     private long countByPhone(Long activityId, String phone) {

@@ -57,6 +57,8 @@ public abstract class IntegrationTestBase {
     void resetDatabase() throws com.fasterxml.jackson.core.JsonProcessingException {
         jdbc.update("DELETE FROM team_member");
         jdbc.update("DELETE FROM team");
+        jdbc.update("DELETE FROM team_event");
+        jdbc.update("DELETE FROM op_log");
         jdbc.update("DELETE FROM person");
         jdbc.update("DELETE FROM activity");
         jdbc.update("DELETE FROM admin_user");

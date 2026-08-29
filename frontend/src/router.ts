@@ -14,6 +14,7 @@ export const router = createRouter({
         { path: 'home', component: () => import('./views/HomeView.vue') },
         { path: 'activity', component: () => import('./views/ActivityView.vue') },
         { path: 'roster', component: () => import('./views/RosterView.vue') },
+        { path: 'teams', component: () => import('./views/TeamView.vue') },
       ],
     },
     { path: '/form/:token', component: () => import('./views/FormView.vue') },

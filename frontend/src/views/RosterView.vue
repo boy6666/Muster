@@ -15,7 +15,7 @@
       <el-table-column prop="department" label="部门" />
       <el-table-column label="操作" width="90">
         <template #default="{ row }">
-          <el-button link type="danger" @click="remove(row)">删除</el-button>
+          <el-button link type="danger" @click="remove(row as PersonRow)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

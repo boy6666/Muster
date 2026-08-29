@@ -4,7 +4,6 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import MockAdapter from 'axios-mock-adapter'
 import { http, setToken } from '../api/http'
-import { router } from '../router'
 import { setSocketFactory } from '../composables/useStats'
 import HomeView from './HomeView.vue'
 
@@ -27,14 +26,14 @@ beforeEach(() => {
 describe('HomeView', () => {
   it('无活动时显示占位', async () => {
     mock.onGet('/api/activity').reply(200, '')
-    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus, router] } })
+    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus] } })
     await flushPromises()
     expect(wrapper.text()).toContain('没有进行中的活动')
   })
 
   it('窗口非 ACTIVE 时显示占位', async () => {
     mock.onGet('/api/activity').reply(200, { windowStatus: 'NOT_STARTED' })
-    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus, router] } })
+    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus] } })
     await flushPromises()
     expect(wrapper.text()).toContain('没有进行中的活动')
   })
@@ -43,7 +42,7 @@ describe('HomeView', () => {
     mock.onGet('/api/activity').reply(200, { windowStatus: 'ACTIVE' })
     mock.onGet('/api/stats').reply(200,
       { total: 10, joined: 6, notJoined: 4, teamCount: 2, pendingTeamCount: 1 })
-    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus, router] } })
+    const wrapper = mount(HomeView, { global: { plugins: [createPinia(), ElementPlus] } })
     await flushPromises()
     expect(wrapper.text()).toContain('10')
     expect(wrapper.text()).toContain('导出已参加')

@@ -4,11 +4,12 @@ import { createPinia } from 'pinia'
 import ElementPlus, { ElMessageBox } from 'element-plus'
 import MockAdapter from 'axios-mock-adapter'
 import { http, setToken } from '../api/http'
-import { router } from '../router'
 import ActivityView from './ActivityView.vue'
 
-// jsdom 无 canvas 2d 上下文，桩掉二维码绘制
-vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn().mockResolvedValue(undefined) } }))
+// jsdom 无 canvas 2d 上下文，桩掉二维码绘制。
+// 用 vi.fn(impl) 而非 mockResolvedValue：vitest 3 的 restoreAllMocks 会把
+// mockResolvedValue 设的实现重置为 undefined，导致 toCanvas 返回非 Promise。
+vi.mock('qrcode', () => ({ default: { toCanvas: vi.fn(async () => undefined) } }))
 
 let mock: MockAdapter
 const activity = {
@@ -18,7 +19,7 @@ const activity = {
 }
 
 async function mountView() {
-  const wrapper = mount(ActivityView, { global: { plugins: [createPinia(), ElementPlus, router] } })
+  const wrapper = mount(ActivityView, { global: { plugins: [createPinia(), ElementPlus] } })
   await flushPromises()
   return wrapper
 }

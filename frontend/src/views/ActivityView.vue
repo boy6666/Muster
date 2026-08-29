@@ -90,9 +90,9 @@ const qrCanvas = ref<HTMLCanvasElement>()
 
 const timeEditable = computed(() => activity.value?.windowStatus === 'NOT_STARTED')
 const statusType = computed(() =>
-  ({ NOT_STARTED: 'info', ACTIVE: 'success', ENDED: 'danger' })[activity.value?.windowStatus ?? 'NOT_STARTED'])
+  ({ NOT_STARTED: 'info', ACTIVE: 'success', ENDED: 'danger' } as const)[activity.value?.windowStatus ?? 'NOT_STARTED'])
 const statusText = computed(() =>
-  ({ NOT_STARTED: '未开始', ACTIVE: '进行中', ENDED: '已结束' })[activity.value?.windowStatus ?? 'NOT_STARTED'])
+  ({ NOT_STARTED: '未开始', ACTIVE: '进行中', ENDED: '已结束' } as const)[activity.value?.windowStatus ?? 'NOT_STARTED'])
 
 function fmt(dt: string): string {
   return dt?.replace('T', ' ').slice(0, 16) ?? ''

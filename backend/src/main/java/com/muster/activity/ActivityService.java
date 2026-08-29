@@ -127,7 +127,9 @@ public class ActivityService {
     }
 
     public String formUrl(Activity activity) {
-        return formBaseUrl + "/form/" + activity.getQrToken();
+        // FORM_BASE_URL 末尾可能误带 /（如 http://host/），去掉避免拼出 //form/...
+        String base = formBaseUrl.replaceAll("/+$", "");
+        return base + "/form/" + activity.getQrToken();
     }
 
     /** 窗口判定委托 WindowResolver 统一实现。 */

@@ -48,14 +48,19 @@ docker compose up -d --build
 
 **A. Cloudflare Tunnel（推荐，无需开端口、自动 HTTPS）**
 
-```bash
-cloudflared tunnel login
-cloudflared tunnel create muster
-cloudflared tunnel route dns muster muster.wyc.best
-cloudflared tunnel run --url http://localhost:8091 muster   # 建议配成 systemd 服务
-```
+服务器上已有隧道在跑（如 hotel.wyc.best 就走这条）时**不要新建隧道**，往现有隧道加一条映射即可：
 
-隧道路由指向 `HTTP_PORT`，源站保持 HTTP，TLS 由 Cloudflare 终结。此时安全组只需放行 SSH。
+- **仪表盘托管**（cloudflared 服务启动参数带 `--token ey...`）：登录 [one.dash.cloudflare.com](https://one.dash.cloudflare.com) → Networks → Tunnels → 点**现有**那条隧道 → Public Hostname → Add a public hostname：Subdomain `muster`、Domain `wyc.best`、Service `HTTP://localhost:8091` → Save（自动加 DNS 记录）。
+- **配置文件托管**（服务启动参数是 `tunnel run <名字>`）：编辑 `C:\Users\<用户>\.cloudflared\config.yml`，在 `ingress:` 里 hotel 那条之后加：
+
+  ```yaml
+    - hostname: muster.wyc.best
+      service: http://localhost:8091
+  ```
+
+  保持最后一条 `- service: http_status:404` 不动，然后 `cloudflared tunnel route dns <隧道名> muster.wyc.best`（只新增一条 CNAME），再重启 cloudflared 服务。
+
+以上只新增 hostname 映射和一条 CNAME，域名下其他服务不受影响；全程无需开放任何入站端口，TLS 由 Cloudflare 终结（源站保持 HTTP）。全新服务器才需要 `cloudflared tunnel login / create / run` 那套初始化。
 
 **B. 公网 IP 直连**：DNS A 记录指向服务器，再用 Caddy / certbot-nginx 做 HTTPS 反代到 `HTTP_PORT`，并把 `BIND_ADDR=127.0.0.1` 收进本机。安全组放行 80/443。
 

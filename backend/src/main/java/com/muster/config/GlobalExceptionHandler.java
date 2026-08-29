@@ -15,6 +15,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApiException(ApiException e) {
+        if (e.getData() != null) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("code", e.getErrorCode().name());
+            map.put("message", e.getMessage());
+            map.put("data", e.getData());
+            return ResponseEntity.status(e.getErrorCode().getHttpStatus()).body(map);
+        }
         return body(e.getErrorCode().getHttpStatus(), e.getErrorCode().name(), e.getMessage());
     }
 

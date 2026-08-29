@@ -5,6 +5,7 @@ import com.muster.activity.dto.ActivityCreateRequest;
 import com.muster.activity.dto.ActivityUpdateRequest;
 import com.muster.common.ApiException;
 import com.muster.common.ErrorCode;
+import com.muster.team.WindowResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,14 @@ public class ActivityService {
             throw new ApiException(ErrorCode.NOT_FOUND, "尚未创建活动");
         }
         return activity;
+    }
+
+    public Activity currentByToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return null;
+        }
+        return activityMapper.selectOne(new LambdaQueryWrapper<Activity>()
+                .eq(Activity::getQrToken, token));
     }
 
     public Activity create(ActivityCreateRequest request) {
@@ -112,16 +121,10 @@ public class ActivityService {
         return formBaseUrl + "/form/" + activity.getQrToken();
     }
 
-    /** Task 4 将抽出为 WindowResolver 复用。 */
+    /** 窗口判定委托 WindowResolver 统一实现。 */
     public String windowStatus(Activity activity) {
-        LocalDateTime now = LocalDateTime.now(clock);
-        if (Boolean.TRUE.equals(activity.getManuallyEnded()) || now.isAfter(activity.getEndTime())) {
-            return "ENDED";
-        }
-        if (now.isBefore(activity.getStartTime())) {
-            return "NOT_STARTED";
-        }
-        return "ACTIVE";
+        return WindowResolver.resolve(activity.getStartTime(), activity.getEndTime(),
+                Boolean.TRUE.equals(activity.getManuallyEnded()), LocalDateTime.now(clock)).name();
     }
 
     private void validateRange(LocalDateTime start, LocalDateTime end) {

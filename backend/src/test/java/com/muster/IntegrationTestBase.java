@@ -14,6 +14,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -95,5 +96,27 @@ public abstract class IntegrationTestBase {
 
     protected ResponseEntity<String> deleteJson(String url) {
         return rest.exchange(url, HttpMethod.DELETE, new HttpEntity<>(authHeaders()), String.class);
+    }
+
+    /** 生成三列（姓名/手机号/部门）花名册 xlsx。 */
+    protected byte[] rosterWorkbook(List<List<Object>> rows) {
+        var head = List.of(List.of("姓名"), List.of("手机号"), List.of("部门"));
+        var out = new java.io.ByteArrayOutputStream();
+        com.alibaba.excel.EasyExcel.write(out).head(head).sheet("花名册").doWrite(rows);
+        return out.toByteArray();
+    }
+
+    protected ResponseEntity<String> uploadRoster(byte[] bytes) {
+        var resource = new org.springframework.core.io.ByteArrayResource(bytes) {
+            @Override
+            public String getFilename() {
+                return "roster.xlsx";
+            }
+        };
+        var body = new org.springframework.util.LinkedMultiValueMap<String, Object>();
+        body.add("file", resource);
+        HttpHeaders headers = authHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        return rest.postForEntity("/api/roster/import", new HttpEntity<>(body, headers), String.class);
     }
 }

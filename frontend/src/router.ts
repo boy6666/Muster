@@ -12,6 +12,7 @@ export const router = createRouter({
       children: [
         { path: '', redirect: '/admin/home' },
         { path: 'home', component: () => import('./views/HomeView.vue') },
+        { path: 'activity', component: () => import('./views/ActivityView.vue') },
       ],
     },
     { path: '/form/:token', component: () => import('./views/FormView.vue') },

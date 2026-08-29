@@ -55,7 +55,7 @@ function fmt(dt: string): string {
 }
 
 async function load() {
-  const { data } = await http.get<PageResult<OpLogView>>('/api/audit', {
+  const { data } = await http.get<PageResult<OpLogView>>('/api/audit/logs', {
     params: { action: actionFilter.value, page: page.value, size },
   })
   total.value = data.total

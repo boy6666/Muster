@@ -20,8 +20,9 @@ beforeEach(() => {
 })
 
 describe('AuditView', () => {
+  // 后端 AuditController 实际暴露的是 /api/audit/logs（GET），前端必须与其一致
   it('列表渲染操作人、动作与详情', async () => {
-    mock.onGet('/api/audit').reply(200, {
+    mock.onGet('/api/audit/logs').reply(200, {
       total: 2,
       records: [
         { id: 2, adminUsername: 'admin', action: 'TEAM_REVIEW', detail: '组1 PASS', createdAt: '2026-08-29T10:30:00' },
@@ -36,10 +37,10 @@ describe('AuditView', () => {
   })
 
   it('按动作筛选时把 action 传给后端', async () => {
-    mock.onGet('/api/audit').reply(200, { total: 0, records: [] })
+    mock.onGet('/api/audit/logs').reply(200, { total: 0, records: [] })
     const wrapper = await mountView()
     let params: Record<string, unknown> | undefined
-    mock.onGet('/api/audit').reply(config => {
+    mock.onGet('/api/audit/logs').reply(config => {
       params = config.params as Record<string, unknown>
       return [200, { total: 0, records: [] }]
     })

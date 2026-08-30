@@ -1,6 +1,6 @@
 # Muster · 点将台
 
-校园活动分组报名系统：严格单活动、花名册 Excel 导入、扫码报名（组长统一提交）、全部人工审核、实时统计（WebSocket 推送）、xlsx 导出与归档。
+公司活动分组报名系统：严格单活动、花名册 Excel 导入、扫码报名（组长统一提交）、全部人工审核、实时统计（WebSocket 推送）、xlsx 导出与归档。
 
 - 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3 + Element Plus（管理端）+ Vant（移动 H5）· Docker
 - 接口文档：[`docs/api.md`](docs/api.md)

@@ -15,7 +15,7 @@
     <artifactId>muster-backend</artifactId>
     <version>0.1.0</version>
     <name>muster-backend</name>
-    <description>Muster 点将台 - 校园活动分组报名系统后端</description>
+    <description>Muster 点将台 - 公司活动分组报名系统后端</description>
 
     <properties>
         <java.version>21</java.version>

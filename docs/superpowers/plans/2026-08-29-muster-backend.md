@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 实现校园活动分组报名系统的全部后端业务（严格单活动、花名册 Excel、扫码报名、人工审核、实时统计、xlsx 导出），REST API 供前端消费。
+**Goal:** 实现公司活动分组报名系统的全部后端业务（严格单活动、花名册 Excel、扫码报名、人工审核、实时统计、xlsx 导出），REST API 供前端消费。（严格单活动、花名册 Excel、扫码报名、人工审核、实时统计、xlsx 导出），REST API 供前端消费。
 
 **Architecture:** 单体 Spring Boot 应用。业务规则集中在 Service 层，Controller 薄；管理员 API 与组长 API（`/api/form/{token}/**`，免登录）分离；统计变更通过 Spring 事件广播到 WebSocket。唯一性并发冲突交给 MySQL 唯一索引兜底。
 

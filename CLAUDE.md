@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Muster · 点将台 — 校园活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（Vue 3 · Element Plus 管理端 + Vant 报名表单）、`deploy/`（建设中）、`docs/`。
+Muster · 点将台 — 公司活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（Vue 3 · Element Plus 管理端 + Vant 报名表单）、`deploy/`（建设中）、`docs/`。
 
 ## 命令
 

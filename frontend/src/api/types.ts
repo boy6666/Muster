@@ -11,8 +11,8 @@ export interface ActivityResponse {
 }
 export interface Stats {
   total: number
-  joined: number
-  notJoined: number
+  registered: number
+  notRegistered: number
   teamCount: number
   pendingTeamCount: number
 }
@@ -23,28 +23,53 @@ export interface FormInfo {
   groupSizeLimit: number
   windowStatus: 'NOT_STARTED' | 'ACTIVE' | 'ENDED'
 }
-export interface TeamMemberView { name: string; phone: string; department: string }
+export type TeamStatus = 'DRAFT' | 'PENDING' | 'CONFIRMED' | 'REJECTED'
+export interface TeamMemberView {
+  employeeId: string
+  name: string
+  phone: string
+  department: string
+  isLeader: boolean
+}
 export interface TeamDetail {
   id: number
   name: string
-  status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  status: TeamStatus
   rejectReason: string | null
-  capToken: string | null
+  capToken: string
   overLimit: boolean
-  submittedAt: string
+  submittedAt: string | null
   members: TeamMemberView[]
 }
 export interface TeamAdminResponse {
   id: number
   name: string
-  status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  status: TeamStatus
   size: number
   overLimit: boolean
+  leaderName: string
   rejectReason: string | null
-  submittedAt: string
+  submittedAt: string | null
 }
-export interface FormPersonView { name: string; phone: string; department: string }
-export interface ConflictView { phone: string; name: string; teamName: string }
+export interface FormPersonView {
+  employeeId: string
+  name: string
+  phone: string
+  department: string
+  teamId: number | null
+  leader: boolean
+}
+export interface FormTeamView {
+  id: number
+  name: string
+  status: TeamStatus
+  rejectReason: string | null
+  overLimit: boolean
+  submittedAt: string | null
+  isLeader: boolean
+  members: TeamMemberView[]
+}
+export interface ConflictView { employeeId: string; name: string; teamName: string }
 export interface PageResult<T> { total: number; records: T[] }
 export interface OpLogView {
   id: number
@@ -53,9 +78,24 @@ export interface OpLogView {
   detail: string | null
   createdAt: string
 }
+export type TeamEventType =
+  | 'CREATED' | 'SAVED' | 'SUBMITTED' | 'EDITED_BY_ADMIN'
+  | 'CREATED_BY_ADMIN' | 'PASSED' | 'REJECTED'
 export interface TeamEventView {
   id: number
-  type: 'SUBMITTED' | 'EDITED_BY_LEADER' | 'EDITED_BY_ADMIN' | 'PASSED' | 'REJECTED'
+  type: TeamEventType
   detail: string | null
   createdAt: string
+}
+export interface PersonRow {
+  id: number
+  employeeId: string
+  name: string
+  phone: string
+  department: string
+  teamId: number | null
+  teamName: string | null
+  leaderName: string | null
+  isLeader: boolean
+  participated: boolean
 }

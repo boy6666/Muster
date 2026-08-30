@@ -1,26 +1,22 @@
 import { ref, type Ref } from 'vue'
 import { http, type ApiError } from '../api/http'
-import type { FormInfo, FormPersonView, TeamDetail, ConflictView } from '../api/types'
-
-interface Member { name: string; phone: string; department: string }
+import type { FormInfo, FormPersonView, FormTeamView, TeamDetail, ConflictView, TeamMemberView } from '../api/types'
 
 export function useFormPage(token: string) {
   const info: Ref<FormInfo | null> = ref(null)
-  const leader: Ref<Member | null> = ref(null)
-  const leaderPhone = ref('')
-  const leaderError = ref('')
-  const members: Ref<Member[]> = ref([])
-  const addPhone = ref('')
-  const addPreview: Ref<Member | null> = ref(null)
+  const me: Ref<FormPersonView | null> = ref(null)
+  const meError = ref('')
+  const members: Ref<TeamMemberView[]> = ref([])
+  const addEmployeeId = ref('')
+  const addPreview: Ref<FormPersonView | null> = ref(null)
   const addError = ref('')
   const team: Ref<TeamDetail | null> = ref(null)
+  const teamView: Ref<FormTeamView | null> = ref(null)
   const conflicts: Ref<ConflictView[]> = ref([])
   const editing = ref(false)
   const cap = ref('')
 
-  const PHONE = /^1[3-9]\d{9}$/
-
-  /** 二维码 token 人人可见，组级操作必须带提交时发放的 capToken（旧格式/无效记录直接清理）。 */
+  /** 二维码 token 人人可见，组级操作必须带创建组时发放的 capToken（旧格式/无效记录直接清理）。 */
   function readStoredTeam(): { teamId: number; cap: string } | null {
     const raw = localStorage.getItem(`muster.team.${token}`)
     if (!raw) return null
@@ -34,9 +30,8 @@ export function useFormPage(token: string) {
     return null
   }
 
-  function storeTeam(detail: TeamDetail): void {
-    localStorage.setItem(`muster.team.${token}`,
-      JSON.stringify({ teamId: detail.id, cap: detail.capToken ?? '' }))
+  function storeTeam(stored: { teamId: number; cap: string }): void {
+    localStorage.setItem(`muster.team.${token}`, JSON.stringify(stored))
   }
 
   async function load() {
@@ -45,54 +40,72 @@ export function useFormPage(token: string) {
     const saved = readStoredTeam()
     if (saved) {
       try {
-        team.value = (await http.get<TeamDetail>(
+        const detail = (await http.get<TeamDetail>(
           `/api/form/${token}/teams/${saved.teamId}?cap=${encodeURIComponent(saved.cap)}`)).data
-        if (team.value.capToken) cap.value = team.value.capToken
+        team.value = detail
+        cap.value = saved.cap
       } catch { localStorage.removeItem(`muster.team.${token}`) }
     }
   }
 
-  /** 输入完整 11 位才回显；查到即作为组长自动加入成员列表首位。 */
-  async function onLeaderPhone(phone: string): Promise<void> {
-    leaderError.value = ''
-    if (!PHONE.test(phone)) return
+  /** 按完整员工编号查身份；已在组时顺带拉"我的组"视图。 */
+  async function lookupMe(employeeId: string): Promise<void> {
+    meError.value = ''
     try {
       const { data } = await http.get<FormPersonView>(
-        `/api/form/${token}/person`, { params: { phone } })
-      leader.value = data
-      if (!members.value.some(m => m.phone === data.phone)) {
-        members.value.unshift(data)
+        `/api/form/${token}/person`, { params: { employeeId } })
+      me.value = data
+      if (data.teamId != null) {
+        teamView.value = (await http.get<FormTeamView>(
+          `/api/form/${token}/my-team`, { params: { employeeId } })).data
+      } else {
+        teamView.value = null
       }
     } catch (e) {
-      leader.value = null
-      leaderError.value = (e as ApiError).message
+      me.value = null
+      teamView.value = null
+      meError.value = (e as ApiError).message
     }
+  }
+
+  /** 以本人为组长开新组：成员列表首行即本人。 */
+  function startCreate(): void {
+    team.value = null
+    conflicts.value = []
+    editing.value = false
+    members.value = me.value
+      ? [{ employeeId: me.value.employeeId, name: me.value.name, phone: me.value.phone,
+           department: me.value.department, isLeader: true }]
+      : []
   }
 
   async function previewAdd(): Promise<void> {
     addError.value = ''
     addPreview.value = null
-    if (!PHONE.test(addPhone.value)) return
-    if (members.value.some(m => m.phone === addPhone.value)) {
+    const employeeId = addEmployeeId.value.trim()
+    if (!employeeId) return
+    if (members.value.some(m => m.employeeId === employeeId)) {
       addError.value = '该成员已在本组'
       return
     }
     try {
       addPreview.value = (await http.get<FormPersonView>(
-        `/api/form/${token}/person`, { params: { phone: addPhone.value } })).data
+        `/api/form/${token}/person`, { params: { employeeId } })).data
     } catch (e) {
       addError.value = (e as ApiError).message
     }
   }
 
-  async function addMember(phone: string): Promise<boolean> {
-    if (members.value.some(m => m.phone === phone)) return false
-    if (!PHONE.test(phone)) { addError.value = '请输入完整 11 位手机号'; return false }
+  async function addMember(employeeId: string): Promise<boolean> {
+    const id = employeeId.trim()
+    if (members.value.some(m => m.employeeId === id)) return false
+    if (!id) { addError.value = '请输入员工编号'; return false }
     try {
       const { data } = await http.get<FormPersonView>(
-        `/api/form/${token}/person`, { params: { phone } })
-      members.value.push(data)
-      addPhone.value = ''
+        `/api/form/${token}/person`, { params: { employeeId: id } })
+      members.value.push({ employeeId: data.employeeId, name: data.name, phone: data.phone,
+        department: data.department, isLeader: false })
+      addEmployeeId.value = ''
       addPreview.value = null
       return true
     } catch (e) {
@@ -101,46 +114,88 @@ export function useFormPage(token: string) {
     }
   }
 
-  function removeMember(phone: string): void {
-    members.value = members.value.filter(m => m.phone !== phone)
-    if (leader.value?.phone === phone) leader.value = null
+  function removeMember(employeeId: string): void {
+    members.value = members.value.filter(m => m.employeeId !== employeeId)
   }
 
-  /** 超上限由模板弹 confirm；本函数专注提交与结果处理。 */
-  async function submit(): Promise<void> {
-    conflicts.value = []
-    try {
-      const resp = await http.post<TeamDetail>(`/api/form/${token}/teams`,
-        { memberPhoneList: members.value.map(m => m.phone) })
-      team.value = resp.data
-      if (resp.data.capToken) cap.value = resp.data.capToken
-      storeTeam(resp.data)
-      editing.value = false
-    } catch (e) {
-      const apiError = e as ApiError
-      if (apiError.code === 'CONFLICT' && Array.isArray(apiError.data)) {
-        conflicts.value = apiError.data as ConflictView[]
-      } else {
-        throw e
-      }
+  function handleConflict(e: unknown): void {
+    const apiError = e as ApiError
+    if (apiError.code === 'CONFLICT' && Array.isArray(apiError.data)) {
+      conflicts.value = apiError.data as ConflictView[]
+    } else {
+      throw e
     }
   }
 
-  async function startEdit(): Promise<void> {
+  async function createDraft(): Promise<void> {
+    conflicts.value = []
+    try {
+      const { data } = await http.post<TeamDetail>(`/api/form/${token}/teams`, {
+        leaderEmployeeId: members.value[0]?.employeeId ?? '',
+        memberEmployeeIdList: members.value.map(m => m.employeeId),
+      })
+      team.value = data
+      cap.value = data.capToken
+      storeTeam({ teamId: data.id, cap: data.capToken })
+    } catch (e) {
+      handleConflict(e)
+    }
+  }
+
+  /** 提交审核：首提必须带组长手机号；重提交可只带 cap。 */
+  async function submit(leaderPhone: string): Promise<void> {
+    const target = team.value ?? { id: teamView.value!.id }
+    const query = cap.value ? `?cap=${encodeURIComponent(cap.value)}` : ''
+    const { data } = await http.post<TeamDetail>(
+      `/api/form/${token}/teams/${target.id}/submit${query}`, { leaderPhone })
+    if (team.value) team.value = data
+    if (teamView.value) teamView.value = { ...teamView.value, status: data.status, rejectReason: data.rejectReason }
+  }
+
+  /** 保存：只换成员，不改状态。组长以现组长为准（组长转让时调用方先改 members[0]）。 */
+  async function save(): Promise<void> {
+    const target = team.value ?? { id: teamView.value!.id }
+    const leaderEmployeeId = team.value?.members.find(m => m.isLeader)?.employeeId
+      ?? members.value[0]?.employeeId ?? ''
+    const { data } = await http.put<TeamDetail>(
+      `/api/form/${token}/teams/${target.id}?cap=${encodeURIComponent(cap.value)}`, {
+        leaderEmployeeId,
+        memberEmployeeIdList: members.value.map(m => m.employeeId),
+      })
+    if (team.value) team.value = data
+    editing.value = false
+  }
+
+  /** 换机验证：组长凭手机号换 capToken。 */
+  async function verify(teamId: number, leaderPhone: string): Promise<void> {
+    const { data } = await http.post<TeamDetail>(`/api/form/${token}/teams/${teamId}/verify`, { leaderPhone })
+    cap.value = data.capToken
+    storeTeam({ teamId, cap: data.capToken })
+    team.value = data
+  }
+
+  async function deleteTeam(): Promise<void> {
+    const target = team.value ?? { id: teamView.value!.id }
+    await http.delete(`/api/form/${token}/teams/${target.id}?cap=${encodeURIComponent(cap.value)}`)
+    localStorage.removeItem(`muster.team.${token}`)
+    team.value = null
+    teamView.value = null
+    me.value = null
+    members.value = []
+    editing.value = false
+    cap.value = ''
+  }
+
+  function startEdit(): void {
     if (!team.value) return
     members.value = [...team.value.members]
-    leader.value = team.value.members[0] ?? null
     editing.value = true
   }
 
-  async function saveEdit(): Promise<void> {
-    const resp = await http.put<TeamDetail>(
-      `/api/form/${token}/teams/${team.value!.id}?cap=${encodeURIComponent(cap.value)}`,
-      { memberPhoneList: members.value.map(m => m.phone) })
-    team.value = resp.data
-    if (resp.data.capToken) cap.value = resp.data.capToken
-    storeTeam(resp.data)
+  function cancelEdit(): void {
     editing.value = false
+    addPreview.value = null
+    addError.value = ''
   }
 
   async function reloadTeam(): Promise<void> {
@@ -150,8 +205,9 @@ export function useFormPage(token: string) {
   }
 
   return {
-    info, leader, leaderPhone, leaderError, members, addPhone, addPreview, addError,
-    team, conflicts, editing,
-    load, onLeaderPhone, previewAdd, addMember, removeMember, submit, startEdit, saveEdit, reloadTeam,
+    info, me, meError, members, addEmployeeId, addPreview, addError,
+    team, teamView, conflicts, editing, cap,
+    load, lookupMe, startCreate, previewAdd, addMember, removeMember,
+    createDraft, submit, save, verify, deleteTeam, startEdit, cancelEdit, reloadTeam,
   }
 }

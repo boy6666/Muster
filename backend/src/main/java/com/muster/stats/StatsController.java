@@ -1,6 +1,7 @@
 package com.muster.stats;
 
 import com.muster.common.ApiException;
+import com.muster.stats.dto.SizeBucketDto;
 import com.muster.stats.dto.StatsDto;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 public class StatsController {
@@ -26,6 +28,11 @@ public class StatsController {
     @GetMapping("/api/stats")
     public StatsDto stats() {
         return statsService.current();
+    }
+
+    @GetMapping("/api/stats/distribution")
+    public List<SizeBucketDto> distribution() {
+        return statsService.distribution();
     }
 
     @GetMapping("/api/stats/export")

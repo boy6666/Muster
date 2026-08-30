@@ -35,6 +35,9 @@ body{font-family:var(--sans);background:var(--bg-0);color:var(--text-1);font-siz
   background:linear-gradient(90deg,transparent,rgba(6,182,212,.5),transparent);
   animation:scanY 9s linear infinite;opacity:.35}
 @keyframes scanY{0%{top:0}100%{top:100%}}
+/* 原型把页面内容包在 .screen{position:relative;z-index:1} 里抬到 .bg-fx 之上;
+   Vue 版无包裹层,.bg-fx(z-index:0) 底色不透明会盖住普通文档流内容,三个顶层容器统一抬升 */
+.shell,.login-wrap,.form-page{position:relative;z-index:1}
 
 /* ============ 面板 ============ */
 .panel{position:relative;background:linear-gradient(180deg,var(--panel),var(--panel-2));

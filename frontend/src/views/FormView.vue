@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
+import UiModal from '../components/ui/UiModal.vue'
+import { confirm } from '../components/ui/confirm'
+import { toast } from '../components/ui/toast'
 import { useFormPage } from '../composables/useFormPage'
 import type { TeamStatus } from '../api/types'
 
@@ -37,10 +39,10 @@ const overLimit = computed(() => info.value !== null && members.value.length > i
 
 const STATUS_TEXT: Record<TeamStatus, string> =
   { DRAFT: '草稿', PENDING: '审核中', CONFIRMED: '已通过', REJECTED: '已驳回' }
-const STATUS_TYPE: Record<TeamStatus, 'primary' | 'warning' | 'success' | 'danger'> =
-  { DRAFT: 'primary', PENDING: 'warning', CONFIRMED: 'success', REJECTED: 'danger' }
+const STATUS_CLASS: Record<TeamStatus, string> =
+  { DRAFT: 'info', PENDING: 'warn', CONFIRMED: 'ok', REJECTED: 'err' }
 const statusText = (s: TeamStatus) => STATUS_TEXT[s]
-const statusType = (s: TeamStatus) => STATUS_TYPE[s]
+const statusClass = (s: TeamStatus) => STATUS_CLASS[s]
 
 const conflictText = computed(() =>
   conflicts.value.map(c => `${c.name}(${c.employeeId})→${c.teamName}`).join('；'))
@@ -79,9 +81,9 @@ async function onSaveDraft(): Promise<void> {
   try {
     if (editing.value) await save()
     else await createDraft()
-    if (!conflicts.value.length) showSuccessToast(editing.value ? '已保存' : '已保存草稿')
+    if (!conflicts.value.length) toast.success(editing.value ? '已保存' : '已保存草稿')
   } catch (e) {
-    showFailToast((e as { message?: string }).message ?? '保存失败')
+    toast.error((e as { message?: string }).message ?? '保存失败')
   } finally {
     busy.value = false
   }
@@ -120,9 +122,9 @@ async function doSubmit(phone: string): Promise<void> {
     await submit(phone)
     phoneDialog.value = false
     dialogPhone.value = ''
-    showSuccessToast('已提交，等待审核')
+    toast.success('已提交，等待审核')
   } catch (e) {
-    showFailToast((e as { message?: string }).message ?? '提交失败')
+    toast.error((e as { message?: string }).message ?? '提交失败')
   } finally {
     busy.value = false
   }
@@ -131,7 +133,7 @@ async function doSubmit(phone: string): Promise<void> {
 /** 换机验证：组长凭手机号取回 capToken。 */
 async function doVerify(): Promise<void> {
   if (!PHONE.test(verifyPhoneInput.value)) {
-    showFailToast('请输入组长的 11 位手机号')
+    toast.error('请输入组长的 11 位手机号')
     return
   }
   const target = team.value ?? teamView.value
@@ -139,9 +141,9 @@ async function doVerify(): Promise<void> {
   busy.value = true
   try {
     await verify(target.id, verifyPhoneInput.value)
-    showSuccessToast('验证成功')
+    toast.success('验证成功')
   } catch (e) {
-    showFailToast((e as { message?: string }).message ?? '验证失败')
+    toast.error((e as { message?: string }).message ?? '验证失败')
   } finally {
     busy.value = false
   }
@@ -149,16 +151,16 @@ async function doVerify(): Promise<void> {
 
 async function onDelete(): Promise<void> {
   try {
-    await showConfirmDialog({ title: '删除本组', message: '删除后组员回到未报名状态，确认删除？' })
+    await confirm('删除后组员回到未报名状态，确认删除？', '删除本组', 'danger')
   } catch {
     return
   }
   busy.value = true
   try {
     await deleteTeam()
-    showSuccessToast('已删除')
+    toast.success('已删除')
   } catch (e) {
-    showFailToast((e as { message?: string }).message ?? '删除失败')
+    toast.error((e as { message?: string }).message ?? '删除失败')
   } finally {
     busy.value = false
   }
@@ -175,144 +177,208 @@ defineExpose({
 
 <template>
   <div class="form-page">
-    <van-nav-bar :title="info?.name ?? '报名'" />
+    <div class="p-nav">{{ info?.name ?? '报名' }} · 分组报名</div>
 
-    <template v-if="info">
-      <van-empty v-if="info.windowStatus === 'NOT_STARTED'" description="活动未开始，开始时间见现场通知" />
-      <van-empty v-else-if="info.windowStatus === 'ENDED'" description="活动已结束，报名通道关闭" />
+    <div class="p-body">
+      <template v-if="info">
+        <!-- 窗口空态 -->
+        <div v-if="info.windowStatus === 'NOT_STARTED'" class="p-group">
+          <div class="p-cell">活动未开始，开始时间见现场通知</div>
+        </div>
+        <div v-else-if="info.windowStatus === 'ENDED'" class="p-group">
+          <div class="p-cell">活动已结束，报名通道关闭</div>
+        </div>
 
-      <template v-else>
-        <!-- 查看本组（DRAFT/PENDING/CONFIRMED/REJECTED） -->
-        <template v-if="view && !editing">
-          <van-cell-group inset title="我的组">
-            <van-cell title="组名" :value="view.name" />
-            <van-cell title="状态">
-              <template #value>
-                <van-tag :type="statusType(view.status)">{{ statusText(view.status) }}</van-tag>
-              </template>
-            </van-cell>
-            <van-cell v-if="view.status === 'REJECTED' && view.rejectReason" title="驳回理由" :label="view.rejectReason" />
-          </van-cell-group>
-
-          <van-cell-group inset title="组员">
-            <van-cell v-for="m in view.members" :key="m.employeeId"
-                      :title="`${m.name} ${m.employeeId}`" :label="`${m.phone} · ${m.department}`">
-              <template #value>
-                <van-tag v-if="m.isLeader" type="primary">组长</van-tag>
-              </template>
-            </van-cell>
-          </van-cell-group>
-
-          <van-notice-bar v-if="view.status === 'PENDING'" wrapable :scrollable="false"
-                          text="审核中，不能修改或删除" />
-
-          <template v-if="manageable">
-            <!-- 无 cap：换机验证 -->
-            <van-cell-group v-if="!cap" inset title="换机验证">
-              <van-cell title="首次在本设备操作" label="输入组长手机号验证后即可修改或删除本组" />
-              <van-field v-model="verifyPhoneInput" type="tel" maxlength="11" label="组长手机号"
-                         placeholder="输入完整 11 位手机号" />
-              <div class="pad">
-                <van-button type="warning" block data-test="verify-submit" :loading="busy" @click="doVerify">
-                  验证
-                </van-button>
+        <template v-else>
+          <!-- 查看本组（DRAFT/PENDING/CONFIRMED/REJECTED） -->
+          <template v-if="view && !editing">
+            <div class="p-group">
+              <div class="p-gt">我的组 · MY TEAM</div>
+              <div class="p-cell">
+                <span class="lbl">组名</span>
+                <span class="val"><b>{{ view.name }}</b></span>
               </div>
-            </van-cell-group>
-            <div v-else class="pad">
-              <van-button data-test="edit-team" block :loading="busy" @click="startEdit">修改组员</van-button>
-              <van-button v-if="view.status === 'REJECTED'" data-test="resubmit" type="primary" block
-                          :loading="busy" @click="onSubmitClick">提交报名</van-button>
-              <van-button data-test="delete-team" type="danger" block :loading="busy" @click="onDelete">
-                删除本组
-              </van-button>
+              <div class="p-cell">
+                <span class="lbl">状态</span>
+                <span class="val"></span>
+                <span :class="`p-tag ${statusClass(view.status)}`">{{ statusText(view.status) }}</span>
+              </div>
             </div>
+            <div v-if="view.status === 'REJECTED' && view.rejectReason" class="alert err">
+              驳回理由：{{ view.rejectReason }}
+            </div>
+
+            <div class="p-group">
+              <div class="p-gt">组员 · MEMBERS ({{ view.members.length }})</div>
+              <div v-for="m in view.members" :key="m.employeeId" class="p-cell">
+                <span class="val"><b>{{ m.name }} {{ m.employeeId }}</b>
+                  <div class="sub">{{ m.phone }} · {{ m.department }}</div>
+                </span>
+                <span v-if="m.isLeader" class="p-tag info">组长</span>
+              </div>
+            </div>
+
+            <div v-if="view.status === 'PENDING'" class="p-notice warn">审核中，不能修改或删除</div>
+
+            <template v-if="manageable">
+              <!-- 无 cap：换机验证 -->
+              <template v-if="!cap">
+                <div class="p-group">
+                  <div class="p-gt">换机验证 · VERIFY</div>
+                  <div class="p-cell">
+                    <span class="val">首次在本设备操作，输入组长手机号验证后即可修改或删除本组</span>
+                  </div>
+                  <div class="p-cell">
+                    <span class="lbl">组长手机号</span>
+                    <input v-model="verifyPhoneInput" class="p-field" type="tel" maxlength="11"
+                           placeholder="输入完整 11 位手机号">
+                  </div>
+                </div>
+                <button class="p-btn" data-test="verify-submit" :disabled="busy" @click="doVerify">验证</button>
+              </template>
+              <template v-else>
+                <button class="p-btn secondary" data-test="edit-team" :disabled="busy" @click="startEdit">
+                  修改组员
+                </button>
+                <button v-if="view.status === 'REJECTED'" class="p-btn" data-test="resubmit" :disabled="busy"
+                        @click="onSubmitClick">
+                  提交报名
+                </button>
+                <button class="p-btn danger" data-test="delete-team" :disabled="busy" @click="onDelete">
+                  删除本组
+                </button>
+              </template>
+            </template>
+          </template>
+
+          <!-- 编辑组员 / 新建组 -->
+          <template v-else-if="editing || me">
+            <div v-if="conflicts.length" class="alert err">以下成员已在其他组：{{ conflictText }}</div>
+
+            <div v-if="me" class="p-group">
+              <div class="p-gt">我的身份 · ME</div>
+              <div class="p-cell">
+                <span class="val"><b>{{ me.name }}</b>
+                  <div class="sub">{{ me.employeeId }} · {{ me.department }}</div>
+                </span>
+                <span class="p-tag info">{{ me.phone }}</span>
+              </div>
+            </div>
+
+            <div class="p-group">
+              <div class="p-gt">组员 · MEMBERS ({{ members.length }})</div>
+              <div v-for="(m, i) in members" :key="m.employeeId" class="p-cell">
+                <span class="val"><b>{{ m.name }} {{ m.employeeId }}</b>
+                  <div class="sub">{{ m.phone }} · {{ m.department }}</div>
+                </span>
+                <span v-if="i === 0" class="p-tag info">组长</span>
+                <button v-else class="p-rm" @click="removeMember(m.employeeId)">移除</button>
+              </div>
+              <div class="p-cell">
+                <span class="lbl">添加组员</span>
+                <input v-model="addEmployeeId" class="p-field" placeholder="输入完整员工编号" @input="onAddInput()">
+              </div>
+              <div v-if="addPreview" class="p-cell">
+                <span class="val"><b>{{ addPreview.name }} {{ addPreview.employeeId }}</b>
+                  <div class="sub">{{ addPreview.phone }} · {{ addPreview.department }}</div>
+                </span>
+                <button class="p-tag info tag-btn" @click="confirmAdd">＋ 加入</button>
+              </div>
+            </div>
+            <div v-if="addError" class="p-notice err">{{ addError }}</div>
+
+            <div v-if="overLimit" class="p-notice err">已超出上限 {{ info.groupSizeLimit }} 人，仍可提交</div>
+            <div v-else-if="members.length > 0 && members.length < info.groupSizeLimit" class="p-notice warn">
+              少于上限 {{ info.groupSizeLimit }} 人
+            </div>
+
+            <button class="p-btn secondary" data-test="save-draft" :disabled="busy" @click="onSaveDraft">
+              {{ editing ? '保存修改' : '保存草稿' }}
+            </button>
+            <button class="p-btn" data-test="submit" :disabled="busy" @click="onSubmitClick">提交报名</button>
+            <button v-if="editing" class="p-btn ghost" data-test="cancel-edit" :disabled="busy" @click="cancelEdit">
+              取消
+            </button>
+          </template>
+
+          <!-- 身份识别 -->
+          <template v-else>
+            <div class="p-group">
+              <div class="p-gt">身份识别 · IDENTITY</div>
+              <div class="p-cell">
+                <span class="lbl">员工编号</span>
+                <input v-model="employeeIdInput" class="p-field" placeholder="请输入完整员工编号"
+                       @input="onEmployeeIdInput(($event.target as HTMLInputElement).value)">
+              </div>
+            </div>
+            <div v-if="meError" class="p-notice err">{{ meError }}</div>
           </template>
         </template>
-
-        <!-- 编辑组员 / 新建组 -->
-        <template v-else-if="editing || me">
-          <van-notice-bar v-if="conflicts.length" wrapable :scrollable="false" color="#ee0a24" background="#fff1f1"
-                          :text="`以下成员已在其他组：${conflictText}`" />
-
-          <van-cell-group v-if="me" inset title="我的身份">
-            <van-cell :title="me.name" :label="`${me.employeeId} · ${me.department}`" :value="me.phone" />
-          </van-cell-group>
-
-          <van-cell-group inset title="组员">
-            <van-cell v-for="(m, i) in members" :key="m.employeeId"
-                      :title="`${m.name} ${m.employeeId}`" :label="`${m.phone} · ${m.department}`">
-              <template #value>
-                <van-tag v-if="i === 0" type="primary">组长</van-tag>
-                <van-tag v-else type="danger" @click="removeMember(m.employeeId)">移除</van-tag>
-              </template>
-            </van-cell>
-            <van-field v-model="addEmployeeId" label="添加组员" placeholder="输入完整员工编号"
-                       @update:model-value="onAddInput" />
-            <van-cell v-if="addPreview" :title="`${addPreview.name} ${addPreview.employeeId}`"
-                      :label="`${addPreview.phone} · ${addPreview.department}`">
-              <template #value>
-                <van-tag type="primary" @click="confirmAdd">加入</van-tag>
-              </template>
-            </van-cell>
-            <van-cell v-if="addError" :title="addError" />
-          </van-cell-group>
-
-          <van-notice-bar v-if="overLimit" wrapable :scrollable="false" color="#ee0a24" background="#fff1f1"
-                          :text="`已超出上限 ${info.groupSizeLimit} 人，仍可提交`" />
-          <van-notice-bar v-else-if="members.length > 0 && members.length < info.groupSizeLimit"
-                          wrapable :scrollable="false" :text="`少于上限 ${info.groupSizeLimit} 人`" />
-
-          <div class="pad">
-            <van-button data-test="save-draft" block :loading="busy" @click="onSaveDraft">
-              {{ editing ? '保存修改' : '保存草稿' }}
-            </van-button>
-            <van-button data-test="submit" type="primary" block :loading="busy" @click="onSubmitClick">
-              提交报名
-            </van-button>
-            <van-button v-if="editing" data-test="cancel-edit" block @click="cancelEdit">取消</van-button>
-          </div>
-        </template>
-
-        <!-- 身份识别 -->
-        <van-cell-group v-else inset title="身份识别">
-          <van-field v-model="employeeIdInput" label="员工编号" placeholder="请输入完整员工编号"
-                     @update:model-value="onEmployeeIdInput" />
-          <van-cell v-if="meError" :title="meError" />
-        </van-cell-group>
       </template>
-    </template>
-    <van-skeleton v-else :row="6" style="padding: 24px" />
+
+      <div v-else class="p-group">
+        <div class="p-cell">加载中…</div>
+      </div>
+    </div>
 
     <!-- 首次提交：组长手机号验证 -->
-    <van-popup v-model:show="phoneDialog" round style="padding: 24px">
-      <div class="dialog-title">验证组长手机号</div>
-      <van-field v-model="dialogPhone" type="tel" maxlength="11" label="组长手机号"
-                 placeholder="输入完整 11 位手机号" />
-      <div v-if="phoneError" class="phone-error">{{ phoneError }}</div>
-      <van-button type="primary" block data-test="phone-confirm" :loading="busy" @click="confirmPhone">
-        确认
-      </van-button>
-    </van-popup>
+    <UiModal v-model:visible="phoneDialog" title="组长手机验证" width="360px" modal-class="modal-phone">
+      <div class="p-cell modal-row">
+        <span class="lbl">组长手机号</span>
+        <input v-model="dialogPhone" class="input" type="tel" maxlength="11" placeholder="输入完整 11 位手机号">
+      </div>
+      <div v-if="phoneError" class="p-notice err modal-row">{{ phoneError }}</div>
+      <template #footer>
+        <button class="btn ghost" @click="phoneDialog = false">取消</button>
+        <button class="btn primary" data-test="phone-confirm" :disabled="busy" @click="confirmPhone">确认</button>
+      </template>
+    </UiModal>
   </div>
 </template>
 
 <style scoped>
-.pad {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* p-btn 状态变体：tokens.css 只有基础 .p-btn（渐变主色），此处按原型补次级/危险/幽灵态 */
+.p-btn.secondary {
+  background: rgba(6, 182, 212, .08);
+  color: var(--cyan);
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
 }
 
-.dialog-title {
-  text-align: center;
-  font-weight: 600;
-  margin-bottom: 16px;
+.p-btn.danger {
+  background: #ffffff;
+  color: #be123c;
+  border: 1px solid rgba(225, 29, 72, .35);
+  box-shadow: none;
 }
 
-.phone-error {
-  color: #ee0a24;
-  font-size: 12px;
-  padding: 4px 16px;
+.p-btn.ghost {
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.p-btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* p-tag / p-rm 用在 button 上时清掉原生按钮底色 */
+button.p-tag,
+button.p-rm {
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
+.modal-row {
+  padding: 0 0 10px;
+  border-top: none;
+}
+
+.modal-row .input {
+  flex: 1;
 }
 </style>

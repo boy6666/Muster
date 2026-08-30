@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
-import Vant from 'vant'
 import MockAdapter from 'axios-mock-adapter'
 import { http } from '../api/http'
+import { toasts } from '../components/ui/toast'
 import FormView from './FormView.vue'
 
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { token: 'tk' } }) }))
@@ -33,7 +33,7 @@ function teamDetail(overrides: Record<string, unknown> = {}) {
 }
 
 async function mountForm() {
-  wrapper = mount(FormView, { global: { plugins: [Vant] }, attachTo: document.body })
+  wrapper = mount(FormView, { attachTo: document.body })
   await flushPromises()
   return wrapper!
 }
@@ -41,19 +41,14 @@ async function mountForm() {
 beforeEach(() => {
   mock = new MockAdapter(http)
   localStorage.clear()
+  toasts.splice(0)
   mock.onGet('/api/form/tk').reply(200, info)
 })
 
-// Vant 的占位高度测量定时器不随测试环境自动清理，必须显式卸载组件
 afterEach(() => {
   wrapper?.unmount()
   wrapper = null
   vi.restoreAllMocks()
-})
-
-// NavBar 占位测量的裸 setTimeout(setHeight, 100~300) 无法取消，等它们跑完再拆环境
-afterAll(async () => {
-  await new Promise(resolve => setTimeout(resolve, 350))
 })
 
 describe('FormView', () => {
@@ -99,6 +94,7 @@ describe('FormView', () => {
     expect(mock.history.post.filter(h => h.url?.includes('/submit'))).toHaveLength(0)
     expect((w.vm as unknown as { team: { status: string } | null }).team?.status).toBe('DRAFT')
     expect(w.text()).toContain('草稿')
+    expect(toasts.some(t => t.msg === '已保存草稿')).toBe(true)
     expect(JSON.parse(localStorage.getItem('muster.team.tk')!)).toEqual({ teamId: 7, cap: 'cap-7' })
   })
 
@@ -109,6 +105,8 @@ describe('FormView', () => {
     const vm = w.vm as unknown as Record<string, () => unknown> & { phoneDialog: boolean; phoneError: string; dialogPhone: string; team: { status: string } | null }
     await vm.onSubmitClick()
     expect(vm.phoneDialog).toBe(true)
+    await flushPromises()
+    expect(document.body.textContent).toContain('组长手机验证')
     await vm.confirmPhone()
     expect(vm.phoneError).toContain('11 位')
     expect(mock.history.post).toHaveLength(0)
@@ -123,6 +121,7 @@ describe('FormView', () => {
     expect(submitCall).toBeTruthy()
     expect(JSON.parse(submitCall!.data as string)).toEqual({ leaderPhone: '13800000001' })
     expect(vm.team?.status).toBe('PENDING')
+    expect(toasts.some(t => t.msg === '已提交，等待审核')).toBe(true)
   })
 
   it('超上限仅警告不阻断提交', async () => {
@@ -238,7 +237,7 @@ describe('FormView', () => {
     // onDelete 会阻塞在确认弹窗上，点击确认后才继续删除
     void (w.vm as unknown as { onDelete: () => Promise<void> }).onDelete()
     await flushPromises()
-    const confirmBtn = document.querySelector('.van-dialog__confirm') as HTMLElement
+    const confirmBtn = document.querySelector('.modal-confirm .btn.danger') as HTMLElement
     expect(confirmBtn).toBeTruthy()
     confirmBtn.click()
     await flushPromises()

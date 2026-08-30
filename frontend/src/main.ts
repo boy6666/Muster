@@ -1,9 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import Vant from 'vant'
-import 'vant/lib/index.css'
 import './styles/tokens.css'
 import App from './App.vue'
 import { router } from './router'
@@ -15,4 +11,4 @@ setUnauthorizedHandler(() => {
   }
 })
 
-createApp(App).use(createPinia()).use(router).use(ElementPlus).use(Vant).mount('#app')
+createApp(App).use(createPinia()).use(router).mount('#app')

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Muster · 点将台 — 公司活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（Vue 3 · Element Plus 管理端 + Vant 报名表单）、`deploy/`（建设中）、`docs/`。
+Muster · 点将台 — 公司活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（Vue 3，全部组件自绘，视觉令牌唯一来源 `frontend/src/styles/tokens.css`，不使用组件库）、`deploy/`（建设中）、`docs/`。
 
 ## 命令
 
@@ -23,6 +23,7 @@ cd backend && mvn spring-boot:run   # 本地运行 :8080（需 MySQL 8，schema 
 8. **表单查询仅精确员工编号**：`GET /api/form/{token}/person?employeeId=` 必须是**完整**员工编号才查询，不做模糊搜索（防止扫库）；组员列表 `GET .../my-team?employeeId=` 同理。
 9. **组级能力令牌**：二维码 token 全体共享，组详情/改组/删除必须携带提交时发放的 `capToken`（`?cap=`），不匹配按 404 处理（不泄露组是否存在）；分页参数统一走 `PageParams.clamp`（page≥1、1≤size≤200）。
 10. **已报名/已参加口径**：已报名 = 非 `DRAFT` 组的成员（驳回组也算，组被删即退出）；已参加 = `CONFIRMED` 组成员。首页四卡片 已报名/未报名/分组数/待审核；花名册状态列 已参加/未参加。
+11. **实时统计接口**：柱状分布 `GET /api/stats/distribution` → `[{size,count,overLimit}]` 升序、含 `DRAFT`；WS 帧为扁平 `StatsFrameDto`，`recentEvents` = 当前活动最近 20 条组事件（按 id 倒序，已删组显示「已删除组」）。
 
 ## 代码约定
 

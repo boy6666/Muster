@@ -123,7 +123,7 @@ describe('ActivityView', () => {
     expect(times.every(i => !i.disabled)).toBe(true)
 
     await body('.ui-modal .ui-modal-body input').setValue('新年晚会')
-    body('[data-test="save-edit"]').element.click()
+    ;(body('[data-test="save-edit"]').element as HTMLElement).click()
     await settle()
     expect(putBody).toEqual({
       name: '新年晚会', startTime: '2026-08-29T10:00:00', endTime: '2026-08-29T12:00:00', groupSizeLimit: 5,
@@ -147,7 +147,7 @@ describe('ActivityView', () => {
     expect(times.length).toBe(2)
     expect(times.every(i => i.disabled)).toBe(true)
     await body('.ui-modal .ui-modal-body input').setValue('改名晚会')
-    body('[data-test="save-edit"]').element.click()
+    ;(body('[data-test="save-edit"]').element as HTMLElement).click()
     await settle()
     expect(putBody).toEqual({
       name: '改名晚会', startTime: '2026-08-29T10:00:00', endTime: '2026-08-29T12:00:00', groupSizeLimit: 5,

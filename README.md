@@ -2,14 +2,14 @@
 
 公司活动分组报名系统：严格单活动、花名册 Excel 导入、扫码报名（组长统一提交）、全部人工审核、实时统计（WebSocket 推送）、xlsx 导出与归档。
 
-- 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3 + Element Plus（管理端）+ Vant（移动 H5）· Docker
+- 技术栈：Spring Boot 3.5 · Java 21 · MyBatis-Plus · MySQL 8 · Vue 3（管理端与移动 H5 全自绘组件，无 UI 库）· Docker
 - 接口文档：[`docs/api.md`](docs/api.md)
 - 后端：`backend/`　|　前端：`frontend/`　|　部署：`deploy/`
 
 ## 核心玩法
 
 1. 管理员登录 → 创建活动（名称/起止时间/每组人数上限）→ 上传花名册 xlsx（姓名/手机号/部门）。
-2. 系统生成报名表单二维码链接（`GET /api/activity/form-url`）；组长扫码进入表单，输入完整手机号自动回显成员信息，勾选组员统一提交（超上限允许提交但会标记）。
+2. 系统生成报名表单二维码链接（`GET /api/activity/form-url`）；组长扫码进入表单，输入完整员工编号自动回显成员信息，勾选组员统一提交（超上限允许提交但会标记）。
 3. 一人一活动只能在一组；提交即算已参加，驳回不回落，组长可继续改组重新送审。
 4. 管理端实时大屏：参与总人数 / 已参加 / 未参加 / 组数 / 待审核组数（`/ws/stats` WebSocket 推送，改组或审核即刻刷新）。
 5. 审核 PASS/REJECT（驳回必填理由）；随时导出已参加/未参加名单；活动收尾导出三 sheet 归档包（已参加/未参加/分组明细）后才可删除活动、开始下一场。
@@ -42,10 +42,10 @@ npm run dev          # 开发服务器 http://localhost:5173，/api 与 /ws 代�
 ## 测试
 
 ```bash
-# 后端（89 个用例，Testcontainers 需要本机 Docker）
+# 后端（139 个用例，Testcontainers 需要本机 Docker）
 cd backend && mvn test
 
-# 前端（41 个用例，Vitest + jsdom，无需后端）
+# 前端（102 个用例，Vitest + jsdom，无需后端）
 cd frontend && npm test
 ```
 

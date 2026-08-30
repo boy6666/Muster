@@ -1,21 +1,34 @@
 <template>
-  <div class="login-page">
-    <el-card class="login-card">
-      <h2>Muster·点将台</h2>
-      <el-form @submit.prevent="submit">
-        <el-form-item>
-          <el-input v-model="username" placeholder="用户名" autocomplete="username" />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="password" type="password" placeholder="密码" show-password
-                    autocomplete="current-password" />
-        </el-form-item>
-        <el-button type="primary" native-type="submit" :loading="loading" style="width:100%">
-          登录
-        </el-button>
-      </el-form>
-      <p v-if="error" class="error">{{ error }}</p>
-    </el-card>
+  <div class="login-wrap">
+    <div class="login-hero">
+      <svg class="deco" viewBox="0 0 100 100" fill="none">
+        <polygon points="50,4 92,27 92,73 50,96 8,73 8,27" stroke="#0891b2" stroke-width="1.4" opacity=".7"/>
+        <polygon points="50,18 80,34 80,66 50,82 20,66 20,34" stroke="#7c3aed" stroke-width="1" opacity=".5"/>
+        <circle cx="50" cy="50" r="5" fill="#06b6d4"/>
+        <circle cx="50" cy="50" r="14" stroke="#0891b2" stroke-width="1" opacity=".5"/>
+      </svg>
+      <h1>MUSTER <em>· 点将台</em></h1>
+      <p class="sub">公司内部活动分组报名系统 · 实时统计 / 智能分组 / 一键归档</p>
+      <div class="meta">
+        <div><b>✓</b>实时统计</div>
+        <div><b>✓</b>智能分组</div>
+        <div><b>✓</b>一键归档</div>
+      </div>
+    </div>
+    <div class="login-card-col">
+      <form class="panel corner login-card" @submit.prevent="submit">
+        <h2>管理员登录</h2>
+        <p class="hint">ADMIN CONSOLE ACCESS</p>
+        <div v-if="error" class="alert err">{{ error }}</div>
+        <label class="f-label" for="login-username">用户名 / USERNAME</label>
+        <input id="login-username" v-model="username" class="input" autocomplete="username"
+               placeholder="用户名" />
+        <label class="f-label" for="login-password">密码 / PASSWORD</label>
+        <input id="login-password" v-model="password" class="input" type="password"
+               autocomplete="current-password" placeholder="密码" />
+        <button class="btn primary" type="submit" :disabled="loading">接 入 控 制 台</button>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -45,10 +58,3 @@ async function submit() {
   }
 }
 </script>
-
-<style scoped>
-.login-page { display: flex; justify-content: center; align-items: center; height: 100vh;
-  background: #f5f7fa; }
-.login-card { width: 360px; text-align: center; }
-.error { color: var(--el-color-danger); }
-</style>

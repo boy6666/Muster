@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Muster · 点将台 — 校园活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（建设中）、`deploy/`（建设中）、`docs/`。
+Muster · 点将台 — 校园活动分组报名系统。仓库布局：`backend/`（Spring Boot 3.5 · Java 21）、`frontend/`（Vue 3 · Element Plus 管理端 + Vant 报名表单）、`deploy/`（建设中）、`docs/`。
 
 ## 命令
 
@@ -15,13 +15,14 @@ cd backend && mvn spring-boot:run   # 本地运行 :8080（需 MySQL 8，schema 
 
 1. **严格单活动**：全库至多一个活动。未导出归档包不能新建/删除（`ARCHIVE_REQUIRED`）。
 2. **活动窗口**：`manuallyEnded || now>endTime → ENDED`；`now<startTime → NOT_STARTED`；否则 `ACTIVE`（边界 now==start/end 视为 ACTIVE）。组长/管理员改组仅限 ACTIVE；审核（PASS/REJECT）不受窗口限制。
-3. **一人一组**：手机号 `^1[3-9]\d{9}$`，活动内唯一（花名册 + 组成员共用唯一约束）。冲突返回 409 并在 `data` 中带冲突明细。
-4. **提交即算已参加**：组提交 → `PENDING`，成员计入 joined；驳回**不回落**（组留 `REJECTED` + 理由），组长保留改组权（改组 → 回 `PENDING` 并清理由），管理员改组 → 直接 `CONFIRMED`。
+3. **一人一组**：按**员工编号**判定身份；员工编号（非空 1..32）与手机号 `^1[3-9]\d{9}$` 均活动内唯一（花名册 + 组成员共用唯一约束）。冲突返回 409 并在 `data` 中带冲突明细。
+4. **组生命周期**：建组 → `DRAFT`；**保存 ≠ 提交**（保存仅存组员，状态不变）；提交 → `PENDING`，**首次提交须先 `POST /api/form/{token}/teams/{id}/verify` 用组长手机号换取 `capToken`**；`PENDING` 锁定（不可改不可删）；PASS → `CONFIRMED`；REJECT → 组留 `REJECTED` + 理由（**不回落**），组长可改组重提（重提交清理由）；组长可删自己的 `DRAFT/REJECTED` 组（组员回到未报名）；管理员建组/改组 → 直接 `CONFIRMED`，管理员可删任意状态组。组接口 body 统一 `{leaderEmployeeId, memberEmployeeIdList}`（管理员改组 leader 可省略）。
 5. **组名自动生成**：`组{N+1}`，依赖 `uk_activity_name` 唯一键，冲突重试至多 3 次。
-6. **超上限不拦截**：人数超过 `groupSizeLimit` 允许提交，仅打 `overLimit` 标记（前端负责提示）。
-7. **花名册锁定活动**：Excel 导入/网页增删均挂在当前活动下；活动运行中允许增删。
-8. **表单自动回显仅精确手机号**：`GET /api/form/{token}/person?phone=` 必须是完整 11 位才查询，不做模糊搜索（防止扫库）。
-9. **组级能力令牌**：二维码 token 全体共享，组详情/改组必须携带提交时发放的 `capToken`（`?cap=`），不匹配按 404 处理（不泄露组是否存在）；分页参数统一走 `PageParams.clamp`（page≥1、1≤size≤200）。
+6. **超上限不拦截**：人数超过 `groupSizeLimit` 允许提交，仅打 `overLimit` 标记（前端负责提示，少于下限同样仅提示）。
+7. **花名册锁定活动**：Excel 导入/网页增删改（`POST/PUT/DELETE /api/roster*`）均挂在当前活动下，四列 员工编号/姓名/手机号/部门；存在报名组时一键清空 409 `ARCHIVE_REQUIRED`。
+8. **表单查询仅精确员工编号**：`GET /api/form/{token}/person?employeeId=` 必须是**完整**员工编号才查询，不做模糊搜索（防止扫库）；组员列表 `GET .../my-team?employeeId=` 同理。
+9. **组级能力令牌**：二维码 token 全体共享，组详情/改组/删除必须携带提交时发放的 `capToken`（`?cap=`），不匹配按 404 处理（不泄露组是否存在）；分页参数统一走 `PageParams.clamp`（page≥1、1≤size≤200）。
+10. **已报名/已参加口径**：已报名 = 非 `DRAFT` 组的成员（驳回组也算，组被删即退出）；已参加 = `CONFIRMED` 组成员。首页四卡片 已报名/未报名/分组数/待审核；花名册状态列 已参加/未参加。
 
 ## 代码约定
 

@@ -4,7 +4,7 @@
   </div>
   <div v-else>
     <el-row :gutter="16">
-      <el-col :span="4" v-for="card in cards" :key="card.label">
+      <el-col :span="6" v-for="card in cards" :key="card.label">
         <el-card class="stat-card">
           <div class="num">{{ card.value }}</div>
           <div class="label">{{ card.label }}</div>
@@ -28,9 +28,8 @@ const { stats, start, stop } = useStats()
 const windowStatus = ref<string | null>(null)
 const active = computed(() => windowStatus.value === 'ACTIVE')
 const cards = computed(() => [
-  { label: '花名册总人数', value: stats.value?.total ?? '-' },
-  { label: '已参加', value: stats.value?.joined ?? '-' },
-  { label: '未参加', value: stats.value?.notJoined ?? '-' },
+  { label: '已报名', value: stats.value?.registered ?? '-' },
+  { label: '未报名', value: stats.value?.notRegistered ?? '-' },
   { label: '分组数', value: stats.value?.teamCount ?? '-' },
   { label: '待审核', value: stats.value?.pendingTeamCount ?? '-' },
 ])

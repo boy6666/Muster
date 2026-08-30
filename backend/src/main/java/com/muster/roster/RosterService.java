@@ -145,6 +145,63 @@ public class RosterService {
         return PersonResponse.from(person);
     }
 
+    public PersonResponse update(Long id, PersonCreateRequest request) {
+        Activity activity = activityService.requireCurrent();
+        Person person = personMapper.selectById(id);
+        if (person == null || !person.getActivityId().equals(activity.getId())) {
+            throw new ApiException(ErrorCode.NOT_FOUND, "人员不存在");
+        }
+        String employeeId = request.employeeId().trim();
+        String name = request.name().trim();
+        String phone = request.phone().trim();
+        String department = request.department().trim();
+        if (!EmployeeIdValidator.isValid(employeeId)) {
+            throw new ApiException(ErrorCode.VALIDATION, "员工编号须为 1-32 位非空白字符");
+        }
+        if (name.isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION, "姓名不能为空");
+        }
+        if (!PhoneValidator.valid(phone)) {
+            throw new ApiException(ErrorCode.VALIDATION, "手机号须为 11 位有效手机号");
+        }
+        if (department.isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION, "部门不能为空");
+        }
+        if (personMapper.selectCount(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activity.getId())
+                .eq(Person::getEmployeeId, employeeId)
+                .ne(Person::getId, id)) > 0) {
+            throw new ApiException(ErrorCode.DUPLICATE, "员工编号已在花名册中：" + employeeId);
+        }
+        if (personMapper.selectCount(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activity.getId())
+                .eq(Person::getPhone, phone)
+                .ne(Person::getId, id)) > 0) {
+            throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
+        }
+        person.setEmployeeId(employeeId);
+        person.setName(name);
+        person.setPhone(phone);
+        person.setDepartment(department);
+        personMapper.updateById(person);
+        opLogService.record("ROSTER_EDIT", employeeId + " " + name + " " + phone);
+        return PersonResponse.from(person);
+    }
+
+    @Transactional
+    public int clear() {
+        Activity activity = activityService.requireCurrent();
+        Long teamCount = jdbc.queryForObject("SELECT COUNT(*) FROM team WHERE activity_id = ?",
+                Long.class, activity.getId());
+        if (teamCount != null && teamCount > 0) {
+            throw new ApiException(ErrorCode.CONFLICT, "存在分组，请先删除所有分组再清空名单");
+        }
+        int deleted = personMapper.delete(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activity.getId()));
+        opLogService.record("ROSTER_CLEAR", "清空花名册，删除 " + deleted + " 人");
+        return deleted;
+    }
+
     @Transactional
     public void delete(Long personId) {
         activityService.requireCurrent();

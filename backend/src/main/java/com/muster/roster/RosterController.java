@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -49,6 +50,16 @@ public class RosterController {
     @PostMapping
     public PersonResponse add(@Valid @RequestBody PersonCreateRequest request) {
         return rosterService.add(request);
+    }
+
+    @PutMapping("/{id}")
+    public PersonResponse update(@PathVariable Long id, @Valid @RequestBody PersonCreateRequest request) {
+        return rosterService.update(id, request);
+    }
+
+    @DeleteMapping
+    public Map<String, Object> clear() {
+        return Map.of("deleted", rosterService.clear());
     }
 
     @DeleteMapping("/{id}")

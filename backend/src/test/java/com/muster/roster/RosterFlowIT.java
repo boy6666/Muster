@@ -177,4 +177,81 @@ class RosterFlowIT extends IntegrationTestBase {
         assertThat(resp.getStatusCode().value()).isEqualTo(404);
         assertThat(resp.getBody()).contains("NOT_FOUND");
     }
+
+    @Test
+    void editPersonUpdatesFields() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
+        uploadRoster(bytes);
+        Long e001Id = jdbc.queryForObject(
+                "SELECT id FROM person WHERE employee_id = 'E001'", Long.class);
+
+        var resp = putJson("/api/roster/" + e001Id, Map.of(
+                "employeeId", "E100", "name", "张三改", "phone", "13812340000", "department", "数学系"));
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+        assertThat(resp.getBody()).contains("E100").contains("张三改").contains("数学系");
+
+        var list = getJson("/api/roster?keyword=张三改");
+        assertThat(list.getBody()).contains("E100").doesNotContain("E001");
+    }
+
+    @Test
+    void editRejectsDuplicateEmployeeId() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
+        uploadRoster(bytes);
+        Long e002Id = jdbc.queryForObject(
+                "SELECT id FROM person WHERE employee_id = 'E002'", Long.class);
+
+        var resp = putJson("/api/roster/" + e002Id, Map.of(
+                "employeeId", "E001", "name", "李四", "phone", "13987654321", "department", "外语"));
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("DUPLICATE");
+    }
+
+    @Test
+    void editRejectsDuplicatePhone() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
+        uploadRoster(bytes);
+        Long e002Id = jdbc.queryForObject(
+                "SELECT id FROM person WHERE employee_id = 'E002'", Long.class);
+
+        var resp = putJson("/api/roster/" + e002Id, Map.of(
+                "employeeId", "E002", "name", "李四", "phone", "13812345678", "department", "外语"));
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("PHONE_DUPLICATE");
+    }
+
+    @Test
+    void clearRemovesAllWhenNoTeams() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语"),
+                List.of("E003", "王五", "13600000000", "体育")));
+        uploadRoster(bytes);
+
+        var resp = deleteJson("/api/roster");
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+        assertThat(resp.getBody()).contains("\"deleted\":3");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM person", Integer.class)).isZero();
+    }
+
+    @Test
+    void clearBlockedWhenTeamsExist() {
+        byte[] bytes = rosterWorkbook(List.of(List.of("E001", "张三", "13812345678", "计算机")));
+        uploadRoster(bytes);
+        Long activityId = jdbc.queryForObject("SELECT id FROM activity LIMIT 1", Long.class);
+
+        jdbc.update("INSERT INTO team(activity_id, name, status, submitted_at) VALUES(?, '组1', 'PENDING', NOW())",
+                activityId);
+
+        var resp = deleteJson("/api/roster");
+        assertThat(resp.getStatusCode().value()).isEqualTo(409);
+        assertThat(resp.getBody()).contains("CONFLICT");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM person", Integer.class)).isEqualTo(1);
+    }
 }

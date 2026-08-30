@@ -1,16 +1,22 @@
 <template>
   <div>
-    <el-space style="margin-bottom:12px">
+    <el-space style="margin-bottom:12px" wrap>
       <el-select v-model="statusFilter" style="width:140px" @change="search">
         <el-option label="全部状态" value="" />
         <el-option label="待审核" value="PENDING" />
         <el-option label="已通过" value="CONFIRMED" />
         <el-option label="已驳回" value="REJECTED" />
+        <el-option label="草稿" value="DRAFT" />
       </el-select>
+      <el-button type="primary" @click="openCreate">新建组</el-button>
+      <el-button @click="openPersonSearch">人员搜索</el-button>
     </el-space>
 
     <el-table :data="records" border>
       <el-table-column prop="name" label="组名" width="110" />
+      <el-table-column label="组长" width="100">
+        <template #default="{ row }">{{ (row as TeamAdminResponse).leaderName ?? '—' }}</template>
+      </el-table-column>
       <el-table-column label="人数" width="120">
         <template #default="{ row }">
           {{ row.size }}
@@ -25,12 +31,14 @@
       <el-table-column label="提交时间" width="170">
         <template #default="{ row }">{{ fmt(row.submittedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" min-width="240">
+      <el-table-column label="操作" min-width="260">
         <template #default="{ row }">
           <el-button v-if="row.status === 'PENDING'" link type="success"
                      @click="pass(row as TeamAdminResponse)">通过</el-button>
-          <el-button link type="danger" @click="askReject(row as TeamAdminResponse)">驳回</el-button>
+          <el-button v-if="row.status === 'PENDING'" link type="danger"
+                     @click="askReject(row as TeamAdminResponse)">驳回</el-button>
           <el-button link type="primary" @click="openDetail(row as TeamAdminResponse)">详情</el-button>
+          <el-button link type="danger" @click="removeTeam(row as TeamAdminResponse)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -39,19 +47,25 @@
                    :total="total" :page-size="size" :current-page="page"
                    @current-change="p => { page = p; load() }" />
 
-    <el-drawer v-model="detailVisible" :title="detail?.name" size="420px">
+    <el-drawer v-model="detailVisible" :title="detail?.name" size="460px">
       <template v-if="detail">
         <el-alert v-if="detail.status === 'REJECTED' && detail.rejectReason"
                   type="error" :title="`驳回理由：${detail.rejectReason}`" :closable="false" />
         <el-alert v-if="detail.overLimit" type="warning" title="该组人数超出上限" :closable="false" />
         <h4>成员（{{ detail.members.length }} 人）</h4>
         <el-table :data="detail.members" size="small" border>
-          <el-table-column prop="name" label="姓名" width="80" />
+          <el-table-column prop="employeeId" label="员工编号" width="100" />
+          <el-table-column label="姓名" width="110">
+            <template #default="{ row }">
+              {{ row.name }}
+              <el-tag v-if="row.isLeader" size="small">组长</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="phone" label="手机号" width="120" />
           <el-table-column prop="department" label="部门" />
         </el-table>
         <el-space style="margin:12px 0">
-          <el-button size="small" type="primary" @click="openMemberEditor">管理员改组</el-button>
+          <el-button size="small" type="primary" @click="openMemberEditor()">管理员改组</el-button>
         </el-space>
         <h4>生命周期</h4>
         <el-timeline>
@@ -70,32 +84,72 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editVisible" title="管理员改组（保存后状态直接置为已通过）" width="560px">
-      <el-input v-model="searchKw" placeholder="姓名 / 手机号 / 部门 模糊搜索花名册" clearable
+    <el-dialog v-model="memberVisible"
+               :title="memberMode === 'create' ? '新建组（保存后直接通过）' : '管理员改组（保存后状态直接置为已通过）'"
+               width="640px">
+      <el-input v-model="searchKw" placeholder="员工编号 / 姓名 / 手机号 / 部门 模糊搜索花名册" clearable
                 @keyup.enter="doSearch">
         <template #append>
           <el-button @click="doSearch">搜索</el-button>
         </template>
       </el-input>
       <el-table :data="searchResults" size="small" max-height="220" style="margin-top:8px">
+        <el-table-column prop="employeeId" label="员工编号" width="100" />
         <el-table-column prop="name" label="姓名" width="90" />
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="department" label="部门" />
         <el-table-column label="操作" width="80">
           <template #default="{ row }">
-            <el-button link type="primary" @click="pick(row as TeamMemberView)">加入</el-button>
+            <el-button link type="primary" @click="pick(row as PersonRow)">加入</el-button>
           </template>
         </el-table-column>
       </el-table>
       <h4>已选成员（{{ picked.length }}）</h4>
-      <el-tag v-for="m in picked" :key="m.phone" closable style="margin:0 8px 8px 0"
-              @close="unpick(m)">
-        {{ m.name }} {{ m.phone }}
-      </el-tag>
+      <el-table :data="picked" size="small" max-height="220">
+        <el-table-column prop="employeeId" label="员工编号" width="100" />
+        <el-table-column prop="name" label="姓名" width="90" />
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="department" label="部门" />
+        <el-table-column label="组长" width="70">
+          <template #default="{ row }">
+            <el-radio :model-value="leaderEmployeeId" :value="(row as PickedRow).employeeId"
+                      @change="leaderEmployeeId = (row as PickedRow).employeeId">&nbsp;</el-radio>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button link type="danger" @click="unpick(row as PickedRow)">移除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
       <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
+        <el-button @click="memberVisible = false">取消</el-button>
         <el-button type="primary" @click="saveMembers">保存</el-button>
       </template>
+    </el-dialog>
+
+    <el-dialog v-model="personVisible" title="人员搜索" width="640px">
+      <el-input v-model="personKw" placeholder="员工编号 / 姓名 / 手机号 / 部门" clearable
+                @keyup.enter="doPersonSearch">
+        <template #append>
+          <el-button @click="doPersonSearch">搜索</el-button>
+        </template>
+      </el-input>
+      <el-table :data="personResults" size="small" max-height="320" style="margin-top:8px">
+        <el-table-column prop="employeeId" label="员工编号" width="100" />
+        <el-table-column prop="name" label="姓名" width="90" />
+        <el-table-column prop="phone" label="手机号" width="130" />
+        <el-table-column prop="department" label="部门" />
+        <el-table-column label="所在组" width="110">
+          <template #default="{ row }">{{ (row as PersonRow).teamName ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button v-if="(row as PersonRow).teamId != null" link type="primary"
+                       @click="viewTeam(row as PersonRow)">查看组</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-dialog>
   </div>
 </template>
@@ -104,7 +158,10 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http, type ApiError } from '../api/http'
-import type { PageResult, TeamAdminResponse, TeamDetail, TeamEventView, TeamMemberView } from '../api/types'
+import type { PageResult, PersonRow, TeamAdminResponse, TeamDetail, TeamEventView } from '../api/types'
+
+/** 建组/改组对话框里已选成员的行（取花名册四要素） */
+type PickedRow = { employeeId: string; name: string; phone: string; department: string }
 
 const statusFilter = ref('')
 const page = ref(1)
@@ -121,20 +178,28 @@ const rejectVisible = ref(false)
 const rejectReason = ref('')
 const rejectTarget = ref<TeamAdminResponse | null>(null)
 
-const editVisible = ref(false)
+const memberVisible = ref(false)
+const memberMode = ref<'create' | 'edit'>('create')
+const memberTarget = ref<number | null>(null)
 const searchKw = ref('')
-const searchResults = ref<TeamMemberView[]>([])
-const picked = ref<TeamMemberView[]>([])
-const editTarget = ref<{ id: number } | null>(null)
+const searchResults = ref<PersonRow[]>([])
+const picked = ref<PickedRow[]>([])
+const leaderEmployeeId = ref('')
+
+const personVisible = ref(false)
+const personKw = ref('')
+const personResults = ref<PersonRow[]>([])
 
 const STATUS_TEXT: Record<string, string> =
-  ({ PENDING: '待审核', CONFIRMED: '已通过', REJECTED: '已驳回' })
+  ({ DRAFT: '草稿', PENDING: '待审核', CONFIRMED: '已通过', REJECTED: '已驳回' })
 const STATUS_TYPE: Record<string, string> =
-  ({ PENDING: 'warning', CONFIRMED: 'success', REJECTED: 'danger' })
+  ({ DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'success', REJECTED: 'danger' })
 const EVENT_TEXT: Record<string, string> = {
+  CREATED: '创建组',
+  SAVED: '组长保存',
   SUBMITTED: '提交报名',
-  EDITED_BY_LEADER: '组长修改',
   EDITED_BY_ADMIN: '管理员修改',
+  CREATED_BY_ADMIN: '管理员创建',
   PASSED: '审核通过',
   REJECTED: '驳回',
 }
@@ -190,7 +255,7 @@ async function review(teamId: number, body: Record<string, unknown>) {
   }
 }
 
-async function openDetail(team: TeamAdminResponse) {
+async function openDetail(team: { id: number }) {
   detailId = team.id
   detailVisible.value = true
   const [d, e] = await Promise.all([
@@ -201,51 +266,116 @@ async function openDetail(team: TeamAdminResponse) {
   events.value = e.data
 }
 
-function openMemberEditor() {
-  editTarget.value = { id: detailId }
-  picked.value = detail.value ? detail.value.members.map(m => ({ ...m })) : []
-  searchKw.value = ''
-  searchResults.value = []
-  editVisible.value = true
-}
-
-async function doSearch() {
-  if (!searchKw.value.trim()) return
-  const { data } = await http.get<PageResult<TeamMemberView & { id: number }>>('/api/roster', {
-    params: { keyword: searchKw.value.trim(), page: 1, size: 20 },
-  })
-  searchResults.value = data.records
-}
-
-function pick(row: TeamMemberView) {
-  if (!picked.value.some(m => m.phone === row.phone)) {
-    picked.value.push({ name: row.name, phone: row.phone, department: row.department })
-  }
-}
-
-function unpick(m: TeamMemberView) {
-  picked.value = picked.value.filter(x => x.phone !== m.phone)
-}
-
-async function saveMembers() {
-  if (!editTarget.value) return
+async function removeTeam(team: TeamAdminResponse) {
   try {
-    await http.put(`/api/teams/${editTarget.value.id}/members`,
-      { memberPhoneList: picked.value.map(m => m.phone) })
-    ElMessage.success('已保存，状态置为已通过')
-    editVisible.value = false
+    await ElMessageBox.confirm(`删除 ${team.name}？组员将回到未报名状态`, '删除组', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await http.delete(`/api/teams/${team.id}`)
+    ElMessage.success('已删除')
+    if (detailVisible.value && detailId === team.id) detailVisible.value = false
     await load()
-    if (detailVisible.value && detailId) {
-      await openDetail({ id: detailId } as TeamAdminResponse)
-    }
   } catch (e) {
     ElMessage.error((e as ApiError).message)
   }
 }
 
-defineExpose({ statusFilter, page, records, keyword: searchKw, rejectReason,
-               rejectVisible, rejectTarget, editTarget, picked,
-               load, pass, askReject, submitReject, openDetail, saveMembers })
+function resetMemberDialog() {
+  picked.value = []
+  leaderEmployeeId.value = ''
+  searchKw.value = ''
+  searchResults.value = []
+}
+
+function openCreate() {
+  memberMode.value = 'create'
+  memberTarget.value = null
+  resetMemberDialog()
+  memberVisible.value = true
+}
+
+function openMemberEditor(id?: number) {
+  memberMode.value = 'edit'
+  memberTarget.value = id ?? detailId
+  resetMemberDialog()
+  picked.value = (detail.value?.members ?? [])
+    .map(m => ({ employeeId: m.employeeId, name: m.name, phone: m.phone, department: m.department }))
+  leaderEmployeeId.value = detail.value?.members.find(m => m.isLeader)?.employeeId
+    ?? picked.value[0]?.employeeId ?? ''
+  memberVisible.value = true
+}
+
+async function doSearch() {
+  if (!searchKw.value.trim()) return
+  const { data } = await http.get<PageResult<PersonRow>>('/api/roster', {
+    params: { keyword: searchKw.value.trim(), page: 1, size: 20 },
+  })
+  searchResults.value = data.records
+}
+
+function pick(row: PersonRow) {
+  if (picked.value.some(p => p.employeeId === row.employeeId)) return
+  picked.value.push({ employeeId: row.employeeId, name: row.name, phone: row.phone, department: row.department })
+  if (!leaderEmployeeId.value) leaderEmployeeId.value = row.employeeId
+}
+
+function unpick(row: PickedRow) {
+  picked.value = picked.value.filter(p => p.employeeId !== row.employeeId)
+  if (leaderEmployeeId.value === row.employeeId) leaderEmployeeId.value = picked.value[0]?.employeeId ?? ''
+}
+
+async function saveMembers() {
+  if (!picked.value.length) {
+    ElMessage.warning('请先选择成员')
+    return
+  }
+  const body = { leaderEmployeeId: leaderEmployeeId.value,
+    memberEmployeeIdList: picked.value.map(p => p.employeeId) }
+  try {
+    if (memberMode.value === 'create') {
+      await http.post('/api/teams', body)
+      ElMessage.success('已创建，状态置为已通过')
+    } else {
+      if (memberTarget.value == null) return
+      await http.put(`/api/teams/${memberTarget.value}/members`, body)
+      ElMessage.success('已保存，状态置为已通过')
+    }
+    memberVisible.value = false
+    await load()
+    if (detailVisible.value && detailId) await openDetail({ id: detailId })
+  } catch (e) {
+    ElMessage.error((e as ApiError).message)
+  }
+}
+
+function openPersonSearch() {
+  personKw.value = ''
+  personResults.value = []
+  personVisible.value = true
+}
+
+async function doPersonSearch() {
+  if (!personKw.value.trim()) return
+  const { data } = await http.get<PageResult<PersonRow>>('/api/roster', {
+    params: { keyword: personKw.value.trim(), page: 1, size: 20 },
+  })
+  personResults.value = data.records
+}
+
+async function viewTeam(row: PersonRow) {
+  if (row.teamId == null) return
+  personVisible.value = false
+  await openDetail({ id: row.teamId })
+}
+
+defineExpose({ statusFilter, page, records, rejectReason, rejectVisible, rejectTarget,
+  memberVisible, searchKw, searchResults, picked, leaderEmployeeId,
+  personVisible, personKw, personResults, detailVisible,
+  load, pass, askReject, submitReject, openDetail, removeTeam,
+  openCreate, openMemberEditor, doSearch, pick, unpick, saveMembers,
+  openPersonSearch, doPersonSearch, viewTeam })
 
 load()
 </script>

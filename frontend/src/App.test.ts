@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
+import MockAdapter from 'axios-mock-adapter'
 import App from './App.vue'
 import { router } from './router'
+import { http } from './api/http'
+
+let mock: MockAdapter
 
 beforeEach(() => {
   // 守卫要求已登录才进 /admin/home
   localStorage.setItem('muster.token', 'test-token')
+  // 本机 8080 可能有真实服务在跑，必须拦掉 /admin/home 触发的请求
+  mock = new MockAdapter(http)
+  mock.onGet('/api/activity').reply(200, null)
+  mock.onGet('/api/stats').reply(200,
+    { total: 0, registered: 0, notRegistered: 0, teamCount: 0, pendingTeamCount: 0 })
 })
 
 describe('App', () => {

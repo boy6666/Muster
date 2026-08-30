@@ -13,6 +13,10 @@ import com.muster.common.PhoneValidator;
 import com.muster.roster.dto.PersonCreateRequest;
 import com.muster.roster.dto.PersonResponse;
 import com.muster.roster.dto.PersonRow;
+import com.muster.team.Team;
+import com.muster.team.TeamMapper;
+import com.muster.team.TeamMember;
+import com.muster.team.TeamMemberMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +27,7 @@ import java.time.Clock;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,15 +40,20 @@ public class RosterService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final com.muster.audit.OpLogService opLogService;
+    private final TeamMemberMapper teamMemberMapper;
+    private final TeamMapper teamMapper;
 
     public RosterService(PersonMapper personMapper, ActivityService activityService, ExcelService excelService,
-                         JdbcTemplate jdbc, Clock clock, com.muster.audit.OpLogService opLogService) {
+                         JdbcTemplate jdbc, Clock clock, com.muster.audit.OpLogService opLogService,
+                         TeamMemberMapper teamMemberMapper, TeamMapper teamMapper) {
         this.personMapper = personMapper;
         this.activityService = activityService;
         this.excelService = excelService;
         this.jdbc = jdbc;
         this.clock = clock;
         this.opLogService = opLogService;
+        this.teamMemberMapper = teamMemberMapper;
+        this.teamMapper = teamMapper;
     }
 
     @Transactional
@@ -114,14 +124,47 @@ public class RosterService {
                 .orderByAsc(Person::getId);
         String kw = keyword == null ? "" : keyword.trim();
         if (!kw.isEmpty()) {
-            wrapper.and(w -> w.like(Person::getName, kw)
+            wrapper.and(w -> w.like(Person::getEmployeeId, kw)
+                    .or().like(Person::getName, kw)
                     .or().like(Person::getPhone, kw)
                     .or().like(Person::getDepartment, kw));
         }
         PageParams pp = PageParams.clamp(page, size);
         Page<Person> result = personMapper.selectPage(Page.of(pp.page(), pp.size()), wrapper);
-        List<PersonResponse> records = result.getRecords().stream().map(PersonResponse::from).toList();
+        List<PersonResponse> records = enrich(result.getRecords());
         return new PageResult<>(result.getTotal(), records);
+    }
+
+    /** 批量补齐组别/组长/参加状态，避免逐人查库。 */
+    private List<PersonResponse> enrich(List<Person> records) {
+        if (records.isEmpty()) {
+            return List.of();
+        }
+        var personIds = records.stream().map(Person::getId).toList();
+        var memberships = teamMemberMapper.selectList(
+                new LambdaQueryWrapper<TeamMember>().in(TeamMember::getPersonId, personIds));
+        var teamIds = memberships.stream().map(TeamMember::getTeamId).distinct().toList();
+        Map<Long, Team> teams = teamIds.isEmpty() ? Map.of() : teamMapper.selectBatchIds(teamIds).stream()
+                .collect(Collectors.toMap(Team::getId, t -> t));
+        var leaderIds = teams.values().stream().map(Team::getLeaderPersonId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Person> leaders = leaderIds.isEmpty() ? Map.of() : personMapper.selectBatchIds(leaderIds).stream()
+                .collect(Collectors.toMap(Person::getId, p -> p));
+        Map<Long, Team> teamByPerson = memberships.stream()
+                .filter(m -> teams.containsKey(m.getTeamId()))
+                .collect(Collectors.toMap(TeamMember::getPersonId, m -> teams.get(m.getTeamId())));
+        return records.stream().map(r -> {
+            Team team = teamByPerson.get(r.getId());
+            String leaderName = team != null && team.getLeaderPersonId() != null
+                    && leaders.containsKey(team.getLeaderPersonId())
+                    ? leaders.get(team.getLeaderPersonId()).getName() : null;
+            return new PersonResponse(r.getId(), r.getEmployeeId(), r.getName(), r.getPhone(), r.getDepartment(),
+                    team == null ? null : team.getId(),
+                    team == null ? null : team.getName(),
+                    leaderName,
+                    team != null && r.getId().equals(team.getLeaderPersonId()),
+                    team != null && "CONFIRMED".equals(team.getStatus()));
+        }).toList();
     }
 
     public PersonResponse add(PersonCreateRequest request) {

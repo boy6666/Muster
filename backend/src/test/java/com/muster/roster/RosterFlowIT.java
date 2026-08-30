@@ -254,4 +254,62 @@ class RosterFlowIT extends IntegrationTestBase {
         assertThat(resp.getBody()).contains("CONFLICT");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM person", Integer.class)).isEqualTo(1);
     }
+
+    @Test
+    void searchMatchesEmployeeId() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
+        uploadRoster(bytes);
+
+        var both = getJson("/api/roster?keyword=E00");
+        assertThat(both.getBody()).contains("张三").contains("李四");
+
+        var one = getJson("/api/roster?keyword=E001");
+        assertThat(one.getBody()).contains("张三").doesNotContain("李四");
+    }
+
+    @Test
+    void listShowsTeamInfoAndStatus() throws Exception {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语"),
+                List.of("E003", "王五", "13600000000", "体育")));
+        uploadRoster(bytes);
+        Long activityId = jdbc.queryForObject("SELECT id FROM activity LIMIT 1", Long.class);
+        Long e001 = jdbc.queryForObject("SELECT id FROM person WHERE employee_id = 'E001'", Long.class);
+        Long e002 = jdbc.queryForObject("SELECT id FROM person WHERE employee_id = 'E002'", Long.class);
+        jdbc.update("INSERT INTO team(activity_id, name, status, submitted_at, leader_person_id) "
+                + "VALUES(?, '组1', 'PENDING', NOW(), ?)", activityId, e001);
+        Long teamId = jdbc.queryForObject("SELECT id FROM team LIMIT 1", Long.class);
+        jdbc.update("INSERT INTO team_member(team_id, person_id) VALUES(?, ?)", teamId, e001);
+        jdbc.update("INSERT INTO team_member(team_id, person_id) VALUES(?, ?)", teamId, e002);
+
+        var body = new com.fasterxml.jackson.databind.json.JsonMapper().readTree(
+                getJson("/api/roster?page=1&size=20").getBody());
+        var records = body.path("records");
+        assertThat(records.size()).isEqualTo(3);
+        for (var node : records) {
+            switch (node.path("employeeId").asText()) {
+                case "E001" -> {
+                    assertThat(node.path("teamId").asLong()).isEqualTo(teamId);
+                    assertThat(node.path("teamName").asText()).isEqualTo("组1");
+                    assertThat(node.path("leaderName").asText()).isEqualTo("张三");
+                    assertThat(node.path("isLeader").asBoolean()).isTrue();
+                    assertThat(node.path("participated").asBoolean()).isFalse();
+                }
+                case "E002" -> {
+                    assertThat(node.path("teamName").asText()).isEqualTo("组1");
+                    assertThat(node.path("isLeader").asBoolean()).isFalse();
+                    assertThat(node.path("leaderName").asText()).isEqualTo("张三");
+                }
+                case "E003" -> {
+                    assertThat(node.path("teamId").isNull()).isTrue();
+                    assertThat(node.path("teamName").isNull()).isTrue();
+                    assertThat(node.path("participated").asBoolean()).isFalse();
+                }
+                default -> org.junit.jupiter.api.Assertions.fail("未知员工编号：" + node);
+            }
+        }
+    }
 }

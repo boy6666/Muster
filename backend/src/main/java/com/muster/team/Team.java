@@ -20,6 +20,9 @@ public class Team {
 
     private String status;
 
+    /** 组长的 person.id；DRAFT 建组即设置，管理员改组时保持指向组内成员。 */
+    private Long leaderPersonId;
+
     private String rejectReason;
 
     /** 组级能力令牌：报名表单查看/改组时必须携带，防止共享二维码遍历 teamId。 */

@@ -157,13 +157,13 @@ describe('AdminLayout', () => {
     expect(router.currentRoute.value.path).toBe('/login')
   })
 
-  it('修改密码弹窗可开,含旧/新两个密码输入', async () => {
+  it('修改密码弹窗可开,含旧密码/新密码/确认新密码三个输入', async () => {
     await mountLayout()
     expect(q('.ui-modal')).toBeNull()
     await openPasswordModal()
     expect(q('.ui-modal')).toBeTruthy()
     expect(q('.ui-modal-title')!.textContent).toContain('修改密码')
-    expect(q('.ui-modal')!.querySelectorAll('input[type="password"]')).toHaveLength(2)
+    expect(q('.ui-modal')!.querySelectorAll('input[type="password"]')).toHaveLength(3)
   })
 
   it('新密码少于 6 位提示且不调接口', async () => {
@@ -171,9 +171,22 @@ describe('AdminLayout', () => {
     await openPasswordModal()
     setModalPassword(0, 'old-pass')
     setModalPassword(1, '123')
+    setModalPassword(2, '123')
     clickSave()
     await flushPromises()
     expect(toasts.some(t => t.msg === '新密码至少 6 位')).toBe(true)
+    expect(mock.history.put).toHaveLength(0)
+  })
+
+  it('两次新密码不一致提示且不调接口', async () => {
+    await mountLayout()
+    await openPasswordModal()
+    setModalPassword(0, 'old-pass')
+    setModalPassword(1, 'new-pass-1')
+    setModalPassword(2, 'different')
+    clickSave()
+    await flushPromises()
+    expect(toasts.some(t => t.msg === '两次输入的新密码不一致')).toBe(true)
     expect(mock.history.put).toHaveLength(0)
   })
 
@@ -183,6 +196,7 @@ describe('AdminLayout', () => {
     await openPasswordModal()
     setModalPassword(0, 'old-pass')
     setModalPassword(1, 'new-pass-1')
+    setModalPassword(2, 'new-pass-1')
     clickSave()
     await flushPromises()
     expect(mock.history.put).toHaveLength(1)

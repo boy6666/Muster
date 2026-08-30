@@ -6,6 +6,9 @@
     <label class="f-label" for="pwd-new">新密码</label>
     <input id="pwd-new" v-model="newPassword" class="input" type="password" style="width:100%"
            autocomplete="new-password" placeholder="至少 6 位" />
+    <label class="f-label" for="pwd-confirm">确认新密码</label>
+    <input id="pwd-confirm" v-model="confirmPassword" class="input" type="password" style="width:100%"
+           autocomplete="new-password" placeholder="再输入一遍新密码" />
     <template #footer>
       <button class="btn ghost" @click="visible = false">取消</button>
       <button class="btn primary" :disabled="saving" @click="save">保存</button>
@@ -23,6 +26,7 @@ import type { ApiError } from '../api/http'
 const visible = defineModel<boolean>({ default: false })
 const oldPassword = ref('')
 const newPassword = ref('')
+const confirmPassword = ref('')
 const saving = ref(false)
 const store = useAuthStore()
 
@@ -33,11 +37,16 @@ watch(visible, v => {
 function reset() {
   oldPassword.value = ''
   newPassword.value = ''
+  confirmPassword.value = ''
 }
 
 async function save() {
   if (newPassword.value.length < 6) {
     toast.warning('新密码至少 6 位')
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    toast.warning('两次输入的新密码不一致')
     return
   }
   saving.value = true

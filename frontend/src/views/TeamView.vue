@@ -1,162 +1,182 @@
 <template>
   <div>
-    <el-space style="margin-bottom:12px" wrap>
-      <el-select v-model="statusFilter" style="width:140px" @change="search">
-        <el-option label="全部状态" value="" />
-        <el-option label="待审核" value="PENDING" />
-        <el-option label="已通过" value="CONFIRMED" />
-        <el-option label="已驳回" value="REJECTED" />
-        <el-option label="草稿" value="DRAFT" />
-      </el-select>
-      <el-button type="primary" @click="openCreate">新建组</el-button>
-      <el-button @click="openPersonSearch">人员搜索</el-button>
-    </el-space>
+    <div class="toolbar">
+      <button v-for="c in CHIPS" :key="c.value" class="chip" :class="{ active: statusFilter === c.value }"
+              @click="setFilter(c.value)">
+        {{ c.label }}
+        <span v-if="counts[c.value] != null" class="cnt mono">· {{ counts[c.value] }}</span>
+      </button>
+      <span style="flex:1"></span>
+      <span class="dim" style="font-size:12px">审核不受活动窗口限制 · 驳回需填写理由</span>
+      <button class="btn" @click="openPersonSearch">人员搜索</button>
+      <button class="btn primary" @click="openCreate">新建组</button>
+    </div>
 
-    <el-table :data="records" border>
-      <el-table-column prop="name" label="组名" width="110" />
-      <el-table-column label="组长" width="100">
-        <template #default="{ row }">{{ (row as TeamAdminResponse).leaderName ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="人数" width="120">
-        <template #default="{ row }">
-          {{ row.size }}
-          <el-tag v-if="row.overLimit" type="warning" size="small">超员</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="110">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="提交时间" width="170">
-        <template #default="{ row }">{{ fmt(row.submittedAt) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" min-width="260">
-        <template #default="{ row }">
-          <el-button v-if="row.status === 'PENDING'" link type="success"
-                     @click="pass(row as TeamAdminResponse)">通过</el-button>
-          <el-button v-if="row.status === 'PENDING'" link type="danger"
-                     @click="askReject(row as TeamAdminResponse)">驳回</el-button>
-          <el-button link type="primary" @click="openDetail(row as TeamAdminResponse)">详情</el-button>
-          <el-button link type="danger" @click="removeTeam(row as TeamAdminResponse)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="panel corner" style="overflow:hidden">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>组名</th>
+            <th>组长</th>
+            <th>人数</th>
+            <th>状态</th>
+            <th>提交时间</th>
+            <th class="ops">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in records" :key="row.id">
+            <td><b>{{ row.name }}</b></td>
+            <td>{{ row.leaderName ?? '—' }}</td>
+            <td class="mono">{{ row.size }}<span v-if="row.overLimit" class="tag warn" style="margin-left:6px">超员</span></td>
+            <td><span class="tag" :class="statusClass(row.status)">{{ statusText(row.status) }}</span></td>
+            <td class="mono dim">{{ fmt(row.submittedAt) }}</td>
+            <td class="ops">
+              <button v-if="row.status === 'PENDING'" class="link ok" @click="pass(row)">通过</button>
+              <button v-if="row.status === 'PENDING'" class="link err" @click="askReject(row)">驳回</button>
+              <button class="link" @click="openDetail(row)">详情</button>
+              <button class="link err" @click="removeTeam(row)">删除</button>
+            </td>
+          </tr>
+          <tr v-if="!records.length">
+            <td colspan="6" class="empty">暂无数据</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <el-pagination style="margin-top:12px" layout="total, prev, pager, next"
-                   :total="total" :page-size="size" :current-page="page"
-                   @current-change="p => { page = p; load() }" />
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:14px">
+      <span class="dim" style="font-size:12.5px">共 <b class="mono" style="color:var(--cyan)">{{ total }}</b> 组</span>
+      <UiPagination :total="total" :page="page" :size="size" @change="onPage" />
+    </div>
 
-    <el-drawer v-model="detailVisible" :title="detail?.name" size="460px">
+    <UiDrawer v-model:visible="detailVisible" :title="detail?.name ?? ''">
       <template v-if="detail">
-        <el-alert v-if="detail.status === 'REJECTED' && detail.rejectReason"
-                  type="error" :title="`驳回理由：${detail.rejectReason}`" :closable="false" />
-        <el-alert v-if="detail.overLimit" type="warning" title="该组人数超出上限" :closable="false" />
-        <h4>成员（{{ detail.members.length }} 人）</h4>
-        <el-table :data="detail.members" size="small" border>
-          <el-table-column prop="employeeId" label="员工编号" width="100" />
-          <el-table-column label="姓名" width="110">
-            <template #default="{ row }">
-              {{ row.name }}
-              <el-tag v-if="row.isLeader" size="small">组长</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="phone" label="手机号" width="120" />
-          <el-table-column prop="department" label="部门" />
-        </el-table>
-        <el-space style="margin:12px 0">
-          <el-button size="small" type="primary" @click="openMemberEditor()">管理员改组</el-button>
-        </el-space>
-        <h4>生命周期</h4>
-        <el-timeline>
-          <el-timeline-item v-for="ev in events" :key="ev.id" :timestamp="fmt(ev.createdAt)">
-            {{ eventTypeText(ev.type) }}<span v-if="ev.detail">：{{ ev.detail }}</span>
-          </el-timeline-item>
-        </el-timeline>
+        <span class="tag" :class="statusClass(detail.status)">{{ statusText(detail.status) }}</span>
+        <div v-if="detail.status === 'REJECTED' && detail.rejectReason" class="alert" style="margin-top:12px">
+          <span>⛔</span><span><b>驳回理由：</b>{{ detail.rejectReason }}</span>
+        </div>
+        <div v-if="detail.overLimit" class="alert warn" style="margin-top:12px">
+          <span>⚠</span><span>该组人数超出上限（超员仅标记，提交未被拦截）</span>
+        </div>
+        <div class="p-title" style="margin-top:18px">成员 · {{ detail.members.length }} 人</div>
+        <table class="tbl" style="margin-bottom:18px">
+          <thead><tr><th>员工编号</th><th>姓名</th><th>手机号</th><th>部门</th></tr></thead>
+          <tbody>
+            <tr v-for="m in detail.members" :key="m.employeeId">
+              <td class="mono">{{ m.employeeId }}</td>
+              <td>{{ m.name }}<span v-if="m.isLeader" class="tag info" style="margin-left:4px">组长</span></td>
+              <td class="mono">{{ m.phone }}</td>
+              <td>{{ m.department }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="p-title">生命周期 · TIMELINE</div>
+        <div class="tl">
+          <div v-for="ev in events" :key="ev.id" class="tl-item">
+            <div class="tt">{{ eventTypeText(ev.type) }}<span v-if="ev.detail">：{{ ev.detail }}</span></div>
+            <div class="ts">{{ fmt(ev.createdAt) }}</div>
+          </div>
+          <div v-if="!events.length" class="dim" style="font-size:12px;padding-bottom:12px">暂无事件</div>
+        </div>
       </template>
-    </el-drawer>
-
-    <el-dialog v-model="rejectVisible" title="驳回" width="420px">
-      <el-input v-model="rejectReason" type="textarea" :rows="3" placeholder="必填：说明驳回理由" />
       <template #footer>
-        <el-button @click="rejectVisible = false">取消</el-button>
-        <el-button type="danger" @click="submitReject">驳回</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="memberVisible"
-               :title="memberMode === 'create' ? '新建组（保存后直接通过）' : '管理员改组（保存后状态直接置为已通过）'"
-               width="640px">
-      <el-input v-model="searchKw" placeholder="员工编号 / 姓名 / 手机号 / 部门 模糊搜索花名册" clearable
-                @keyup.enter="doSearch">
-        <template #append>
-          <el-button @click="doSearch">搜索</el-button>
+        <template v-if="detail">
+          <button v-if="detail.status === 'PENDING'" class="btn ok" style="flex:1" @click="pass(detail)">✓ 通过</button>
+          <button v-if="detail.status === 'PENDING'" class="btn danger" style="flex:1" @click="askReject(detail)">✕ 驳回</button>
+          <button class="btn" style="flex:1" @click="openMemberEditor()">⚙ 管理员改组</button>
         </template>
-      </el-input>
-      <el-table :data="searchResults" size="small" max-height="220" style="margin-top:8px">
-        <el-table-column prop="employeeId" label="员工编号" width="100" />
-        <el-table-column prop="name" label="姓名" width="90" />
-        <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="department" label="部门" />
-        <el-table-column label="操作" width="80">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="pick(row as PersonRow)">加入</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <h4>已选成员（{{ picked.length }}）</h4>
-      <el-table :data="picked" size="small" max-height="220">
-        <el-table-column prop="employeeId" label="员工编号" width="100" />
-        <el-table-column prop="name" label="姓名" width="90" />
-        <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="department" label="部门" />
-        <el-table-column label="组长" width="70">
-          <template #default="{ row }">
-            <el-radio :model-value="leaderEmployeeId" :value="(row as PickedRow).employeeId"
-                      @change="leaderEmployeeId = (row as PickedRow).employeeId">&nbsp;</el-radio>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="80">
-          <template #default="{ row }">
-            <el-button link type="danger" @click="unpick(row as PickedRow)">移除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      </template>
+    </UiDrawer>
+
+    <UiModal v-model:visible="rejectVisible" title="驳回" width="440px">
+      <label class="f-label">驳回理由（必填）</label>
+      <textarea v-model="rejectReason" class="input" rows="3" style="width:100%;resize:vertical"
+                placeholder="必填：说明驳回理由"></textarea>
       <template #footer>
-        <el-button @click="memberVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveMembers">保存</el-button>
+        <button class="btn ghost" @click="rejectVisible = false">取消</button>
+        <button class="btn danger" @click="submitReject">驳回</button>
       </template>
-    </el-dialog>
+    </UiModal>
 
-    <el-dialog v-model="personVisible" title="人员搜索" width="640px">
-      <el-input v-model="personKw" placeholder="员工编号 / 姓名 / 手机号 / 部门" clearable
-                @keyup.enter="doPersonSearch">
-        <template #append>
-          <el-button @click="doPersonSearch">搜索</el-button>
-        </template>
-      </el-input>
-      <el-table :data="personResults" size="small" max-height="320" style="margin-top:8px">
-        <el-table-column prop="employeeId" label="员工编号" width="100" />
-        <el-table-column prop="name" label="姓名" width="90" />
-        <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="department" label="部门" />
-        <el-table-column label="所在组" width="110">
-          <template #default="{ row }">{{ (row as PersonRow).teamName ?? '—' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="90">
-          <template #default="{ row }">
-            <el-button v-if="(row as PersonRow).teamId != null" link type="primary"
-                       @click="viewTeam(row as PersonRow)">查看组</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
+    <UiModal v-model:visible="memberVisible" width="680px"
+             :title="memberMode === 'create' ? '新建组（保存后直接通过）' : '管理员改组（保存后状态直接置为已通过）'">
+      <div style="display:flex;gap:8px">
+        <input v-model="searchKw" class="input" style="flex:1"
+               placeholder="员工编号 / 姓名 / 手机号 / 部门 模糊搜索花名册" @keyup.enter="doSearch" />
+        <button class="btn" @click="doSearch">搜索</button>
+      </div>
+      <table class="tbl" style="margin-top:10px">
+        <thead><tr><th>员工编号</th><th>姓名</th><th>手机号</th><th>部门</th><th class="ops">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="row in searchResults" :key="row.id">
+            <td class="mono">{{ row.employeeId }}</td>
+            <td>{{ row.name }}</td>
+            <td class="mono">{{ row.phone }}</td>
+            <td>{{ row.department }}</td>
+            <td class="ops"><button class="link" @click="pick(row)">加入</button></td>
+          </tr>
+          <tr v-if="!searchResults.length"><td colspan="5" class="empty">搜索花名册后点「加入」选人</td></tr>
+        </tbody>
+      </table>
+      <div class="p-title">已选成员 · {{ picked.length }} 人</div>
+      <table class="tbl">
+        <thead><tr><th>员工编号</th><th>姓名</th><th>手机号</th><th>部门</th><th>组长</th><th class="ops">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="row in picked" :key="row.employeeId">
+            <td class="mono">{{ row.employeeId }}</td>
+            <td>{{ row.name }}</td>
+            <td class="mono">{{ row.phone }}</td>
+            <td>{{ row.department }}</td>
+            <td>
+              <input type="radio" name="leader" :checked="leaderEmployeeId === row.employeeId"
+                     :aria-label="`设 ${row.name} 为组长`" @change="leaderEmployeeId = row.employeeId" />
+            </td>
+            <td class="ops"><button class="link err" @click="unpick(row)">移除</button></td>
+          </tr>
+          <tr v-if="!picked.length"><td colspan="6" class="empty">尚未选择成员</td></tr>
+        </tbody>
+      </table>
+      <template #footer>
+        <button class="btn ghost" @click="memberVisible = false">取消</button>
+        <button class="btn primary" @click="saveMembers">保存</button>
+      </template>
+    </UiModal>
+
+    <UiModal v-model:visible="personVisible" title="人员搜索" width="680px">
+      <div style="display:flex;gap:8px">
+        <input v-model="personKw" class="input" style="flex:1" placeholder="员工编号 / 姓名 / 手机号 / 部门"
+               @keyup.enter="doPersonSearch" />
+        <button class="btn" @click="doPersonSearch">搜索</button>
+      </div>
+      <table class="tbl" style="margin-top:10px">
+        <thead><tr><th>员工编号</th><th>姓名</th><th>手机号</th><th>部门</th><th>所在组</th><th class="ops">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="row in personResults" :key="row.id">
+            <td class="mono">{{ row.employeeId }}</td>
+            <td>{{ row.name }}</td>
+            <td class="mono">{{ row.phone }}</td>
+            <td>{{ row.department }}</td>
+            <td>{{ row.teamName ?? '—' }}</td>
+            <td class="ops">
+              <button v-if="row.teamId != null" class="link" @click="viewTeam(row)">查看组</button>
+              <span v-else class="dim">—</span>
+            </td>
+          </tr>
+          <tr v-if="!personResults.length"><td colspan="6" class="empty">无匹配结果</td></tr>
+        </tbody>
+      </table>
+    </UiModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import UiDrawer from '../components/ui/UiDrawer.vue'
+import UiModal from '../components/ui/UiModal.vue'
+import UiPagination from '../components/ui/UiPagination.vue'
+import { confirm } from '../components/ui/confirm'
+import { toast } from '../components/ui/toast'
 import { http, type ApiError } from '../api/http'
 import type { PageResult, PersonRow, TeamAdminResponse, TeamDetail, TeamEventView } from '../api/types'
 
@@ -169,6 +189,17 @@ const size = 10
 const total = ref(0)
 const records = ref<TeamAdminResponse[]>([])
 
+/** 筛选 chips：value 为 '' 表示全部 */
+const CHIPS: { value: string; label: string }[] = [
+  { value: '', label: '全部状态' },
+  { value: 'PENDING', label: '待审核' },
+  { value: 'CONFIRMED', label: '已通过' },
+  { value: 'REJECTED', label: '已驳回' },
+  { value: 'DRAFT', label: '草稿' },
+]
+/** chips 内的计数；null 表示尚未取到（取数失败时静默不渲染） */
+const counts = ref<Record<string, number | null>>({ '': null, PENDING: null, CONFIRMED: null, REJECTED: null, DRAFT: null })
+
 const detailVisible = ref(false)
 const detail = ref<TeamDetail | null>(null)
 const events = ref<TeamEventView[]>([])
@@ -176,7 +207,7 @@ let detailId = 0
 
 const rejectVisible = ref(false)
 const rejectReason = ref('')
-const rejectTarget = ref<TeamAdminResponse | null>(null)
+const rejectTarget = ref<{ id: number; name: string } | null>(null)
 
 const memberVisible = ref(false)
 const memberMode = ref<'create' | 'edit'>('create')
@@ -192,8 +223,8 @@ const personResults = ref<PersonRow[]>([])
 
 const STATUS_TEXT: Record<string, string> =
   ({ DRAFT: '草稿', PENDING: '待审核', CONFIRMED: '已通过', REJECTED: '已驳回' })
-const STATUS_TYPE: Record<string, string> =
-  ({ DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'success', REJECTED: 'danger' })
+const STATUS_CLASS: Record<string, string> =
+  ({ DRAFT: 'info', PENDING: 'warn', CONFIRMED: 'ok', REJECTED: 'err' })
 const EVENT_TEXT: Record<string, string> = {
   CREATED: '创建组',
   SAVED: '组长保存',
@@ -204,11 +235,11 @@ const EVENT_TEXT: Record<string, string> = {
   REJECTED: '驳回',
 }
 
-const statusType = (s: string) => (STATUS_TYPE[s] ?? 'info') as 'warning' | 'success' | 'danger' | 'info'
+const statusClass = (s: string) => STATUS_CLASS[s] ?? 'info'
 const statusText = (s: string) => STATUS_TEXT[s] ?? s
 const eventTypeText = (t: string) => EVENT_TEXT[t] ?? t
 
-function fmt(dt: string): string {
+function fmt(dt: string | null | undefined): string {
   return dt?.replace('T', ' ').slice(0, 16) ?? ''
 }
 
@@ -220,21 +251,50 @@ async function load() {
   records.value = data.records
 }
 
+/** 并行取 5 个 chip 的计数（size=1 只为拿 total），单个失败静默留空 */
+async function loadCounts() {
+  await Promise.all(CHIPS.map(async ({ value }) => {
+    try {
+      const { data } = await http.get<PageResult<TeamAdminResponse>>('/api/teams', {
+        params: { status: value, page: 1, size: 1 },
+      })
+      counts.value[value] = data.total
+    } catch {
+      // 计数取不到就不渲染
+    }
+  }))
+}
+
+/** 审核后列表与计数一起刷新 */
+async function refresh() {
+  await Promise.all([load(), loadCounts()])
+}
+
 function search() {
   page.value = 1
   load()
 }
 
-async function pass(team: TeamAdminResponse) {
+function setFilter(v: string) {
+  statusFilter.value = v
+  search()
+}
+
+function onPage(p: number) {
+  page.value = p
+  load()
+}
+
+async function pass(team: { id: number; name: string }) {
   try {
-    await ElMessageBox.confirm(`确认通过 ${team.name}？`, '审核', { type: 'success' })
+    await confirm(`确认通过 ${team.name}？`, '审核')
   } catch {
     return
   }
   await review(team.id, { action: 'PASS' })
 }
 
-function askReject(team: TeamAdminResponse) {
+function askReject(team: { id: number; name: string }) {
   rejectTarget.value = team
   rejectReason.value = ''
   rejectVisible.value = true
@@ -249,9 +309,9 @@ async function submitReject() {
 async function review(teamId: number, body: Record<string, unknown>) {
   try {
     await http.put(`/api/teams/${teamId}/review`, body)
-    await load()
+    await refresh()
   } catch (e) {
-    ElMessage.error((e as ApiError).message)
+    toast.error((e as ApiError).message)
   }
 }
 
@@ -268,17 +328,17 @@ async function openDetail(team: { id: number }) {
 
 async function removeTeam(team: TeamAdminResponse) {
   try {
-    await ElMessageBox.confirm(`删除 ${team.name}？组员将回到未报名状态`, '删除组', { type: 'warning' })
+    await confirm(`删除 ${team.name}？组员将回到未报名状态`, '删除组')
   } catch {
     return
   }
   try {
     await http.delete(`/api/teams/${team.id}`)
-    ElMessage.success('已删除')
+    toast.success('已删除')
     if (detailVisible.value && detailId === team.id) detailVisible.value = false
-    await load()
+    await refresh()
   } catch (e) {
-    ElMessage.error((e as ApiError).message)
+    toast.error((e as ApiError).message)
   }
 }
 
@@ -328,7 +388,7 @@ function unpick(row: PickedRow) {
 
 async function saveMembers() {
   if (!picked.value.length) {
-    ElMessage.warning('请先选择成员')
+    toast.warning('请先选择成员')
     return
   }
   const body = { leaderEmployeeId: leaderEmployeeId.value,
@@ -336,17 +396,17 @@ async function saveMembers() {
   try {
     if (memberMode.value === 'create') {
       await http.post('/api/teams', body)
-      ElMessage.success('已创建，状态置为已通过')
+      toast.success('已创建，状态置为已通过')
     } else {
       if (memberTarget.value == null) return
       await http.put(`/api/teams/${memberTarget.value}/members`, body)
-      ElMessage.success('已保存，状态置为已通过')
+      toast.success('已保存，状态置为已通过')
     }
     memberVisible.value = false
-    await load()
+    await refresh()
     if (detailVisible.value && detailId) await openDetail({ id: detailId })
   } catch (e) {
-    ElMessage.error((e as ApiError).message)
+    toast.error((e as ApiError).message)
   }
 }
 
@@ -370,12 +430,21 @@ async function viewTeam(row: PersonRow) {
   await openDetail({ id: row.teamId })
 }
 
-defineExpose({ statusFilter, page, records, rejectReason, rejectVisible, rejectTarget,
-  memberVisible, searchKw, searchResults, picked, leaderEmployeeId,
-  personVisible, personKw, personResults, detailVisible,
-  load, pass, askReject, submitReject, openDetail, removeTeam,
+defineExpose({ statusFilter, page, total, records, counts, detail, events, detailVisible,
+  rejectReason, rejectVisible, rejectTarget, memberVisible, searchKw, searchResults, picked, leaderEmployeeId,
+  personVisible, personKw, personResults,
+  load, loadCounts, setFilter, pass, askReject, submitReject, openDetail, removeTeam,
   openCreate, openMemberEditor, doSearch, pick, unpick, saveMembers,
   openPersonSearch, doPersonSearch, viewTeam })
 
 load()
+loadCounts()
 </script>
+
+<style scoped>
+.ops { text-align: right; }
+th.ops { text-align: right; }
+.empty { text-align: center; color: var(--text-3); padding: 26px 0; }
+.cnt { font-size: 12px; opacity: .8; }
+input[type='radio'] { accent-color: #06b6d4; cursor: pointer; width: 15px; height: 15px; }
+</style>

@@ -111,9 +111,9 @@ public abstract class IntegrationTestBase {
         return rest.exchange(url, HttpMethod.DELETE, new HttpEntity<>(authHeaders()), String.class);
     }
 
-    /** 生成三列（姓名/手机号/部门）花名册 xlsx。 */
+    /** 生成四列（员工编号/姓名/手机号/部门）花名册 xlsx，rows 每行按此顺序给 4 格。 */
     protected byte[] rosterWorkbook(List<List<Object>> rows) {
-        var head = List.of(List.of("姓名"), List.of("手机号"), List.of("部门"));
+        var head = List.of(List.of("员工编号"), List.of("姓名"), List.of("手机号"), List.of("部门"));
         var out = new java.io.ByteArrayOutputStream();
         com.alibaba.excel.EasyExcel.write(out).head(head).sheet("花名册").doWrite(rows);
         return out.toByteArray();

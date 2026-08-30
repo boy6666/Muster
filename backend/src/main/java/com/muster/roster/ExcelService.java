@@ -20,13 +20,14 @@ public class ExcelService {
         List<PersonRow> result = new ArrayList<>();
         int rowNo = 2; // 表头占第 1 行，数据从第 2 行计
         for (Map<Integer, String> row : rows) {
-            result.add(new PersonRow(rowNo++, str(row.get(0)), str(row.get(1)), str(row.get(2))));
+            result.add(new PersonRow(rowNo++, str(row.get(0)), str(row.get(1)), str(row.get(2)), str(row.get(3))));
         }
         return result;
     }
 
     public byte[] writeTemplate() {
-        return write(head("姓名", "手机号", "部门"), List.of(), "花名册模板");
+        List<List<Object>> example = List.of(List.of((Object) "1001", "张三", "13812345678", "计算机系"));
+        return write(head("员工编号", "姓名", "手机号", "部门"), example, "花名册模板");
     }
 
     public byte[] writeJoined(List<JoinedRow> rows) {

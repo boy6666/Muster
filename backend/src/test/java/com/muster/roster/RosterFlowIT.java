@@ -3,7 +3,6 @@ package com.muster.roster;
 import com.muster.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,32 +23,33 @@ class RosterFlowIT extends IntegrationTestBase {
 
     @Test
     void templateDownloadsAsXlsx() {
-        var resp = getJson("/api/roster/template");
+        var resp = getBytes("/api/roster/template");
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getHeaders().getContentType().toString())
                 .contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(resp.getBody()).isNotEmpty();
     }
 
     @Test
     void importThreePersonsThenListThem() {
         byte[] bytes = rosterWorkbook(List.of(
-                List.of("张三", "13812345678", "计算机"),
-                List.of("李四", "13987654321", "外语"),
-                List.of("王五", "13600000000", "体育")));
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语"),
+                List.of("E003", "王五", "13600000000", "体育")));
         var resp = uploadRoster(bytes);
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(resp.getBody()).contains("\"imported\":3");
 
         var list = getJson("/api/roster?page=1&size=20");
-        assertThat(list.getBody()).contains("\"total\":3").contains("张三").contains("13987654321");
+        assertThat(list.getBody()).contains("\"total\":3").contains("张三").contains("E002").contains("13987654321");
     }
 
     @Test
-    void fuzzySearchHitsPhoneNameAndDepartment() {
+    void fuzzySearchHitsEmployeeIdPhoneNameAndDepartment() {
         byte[] bytes = rosterWorkbook(List.of(
-                List.of("张三", "13812345678", "计算机"),
-                List.of("李四", "13987654321", "外语"),
-                List.of("王五", "13600000000", "体育")));
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语"),
+                List.of("E003", "王五", "13600000000", "体育")));
         uploadRoster(bytes);
 
         assertThat(getJson("/api/roster?keyword=45678").getBody()).contains("张三").doesNotContain("李四");
@@ -60,8 +60,8 @@ class RosterFlowIT extends IntegrationTestBase {
     @Test
     void invalidRowIsRejectedWithRowNumber() {
         byte[] bytes = rosterWorkbook(List.of(
-                List.of("张三", "13812345678", "计算机"),
-                List.of("李四", "bad", "外语")));
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "bad", "外语")));
         var resp = uploadRoster(bytes);
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         assertThat(resp.getBody()).contains("VALIDATION").contains("3");
@@ -70,10 +70,31 @@ class RosterFlowIT extends IntegrationTestBase {
     }
 
     @Test
-    void duplicateInFileRollsBackWholeImport() {
+    void invalidEmployeeIdRowIsRejected() {
         byte[] bytes = rosterWorkbook(List.of(
-                List.of("张三", "13812345678", "计算机"),
-                List.of("李四", "13812345678", "外语")));
+                List.of("E 01", "张三", "13812345678", "计算机")));
+        var resp = uploadRoster(bytes);
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("VALIDATION").contains("第 2 行");
+    }
+
+    @Test
+    void duplicateEmployeeIdInFileRollsBackWholeImport() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E001", "李四", "13987654321", "外语")));
+        var resp = uploadRoster(bytes);
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("DUPLICATE");
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM person", Integer.class)).isZero();
+    }
+
+    @Test
+    void duplicatePhoneInFileRollsBackWholeImport() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13812345678", "外语")));
         var resp = uploadRoster(bytes);
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         assertThat(resp.getBody()).contains("PHONE_DUPLICATE");
@@ -82,13 +103,27 @@ class RosterFlowIT extends IntegrationTestBase {
     }
 
     @Test
-    void duplicateAgainstExistingPersonRejected() {
+    void employeeIdClashWithExistingPersonRejected() {
         byte[] bytes = rosterWorkbook(List.of(
-                List.of("张三", "13812345678", "计算机"),
-                List.of("李四", "13987654321", "外语")));
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
         uploadRoster(bytes);
 
-        byte[] again = rosterWorkbook(List.of(List.of("赵六", "13987654321", "数学")));
+        byte[] again = rosterWorkbook(List.of(List.of("E001", "赵六", "13600000001", "数学")));
+        var resp = uploadRoster(again);
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("DUPLICATE");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM person", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void duplicateAgainstExistingPhoneRejected() {
+        byte[] bytes = rosterWorkbook(List.of(
+                List.of("E001", "张三", "13812345678", "计算机"),
+                List.of("E002", "李四", "13987654321", "外语")));
+        uploadRoster(bytes);
+
+        byte[] again = rosterWorkbook(List.of(List.of("E003", "赵六", "13987654321", "数学")));
         var resp = uploadRoster(again);
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         assertThat(resp.getBody()).contains("PHONE_DUPLICATE");
@@ -96,21 +131,33 @@ class RosterFlowIT extends IntegrationTestBase {
 
     @Test
     void addPersonManuallyThenDuplicateRejected() {
-        var ok = postJson("/api/roster", Map.of("name", "张三", "phone", "13812345678", "department", "计算机"));
+        var ok = postJson("/api/roster", Map.of(
+                "employeeId", "E001", "name", "张三", "phone", "13812345678", "department", "计算机"));
         assertThat(ok.getStatusCode().value()).isEqualTo(200);
-        assertThat(ok.getBody()).contains("张三");
+        assertThat(ok.getBody()).contains("张三").contains("E001");
 
-        var dup = postJson("/api/roster", Map.of("name", "李四", "phone", "13812345678", "department", "外语"));
-        assertThat(dup.getStatusCode().value()).isEqualTo(400);
-        assertThat(dup.getBody()).contains("PHONE_DUPLICATE");
+        var missingId = postJson("/api/roster", Map.of(
+                "name", "王五", "phone", "13800000009", "department", "体育"));
+        assertThat(missingId.getStatusCode().value()).isEqualTo(400);
 
-        var badPhone = postJson("/api/roster", Map.of("name", "王五", "phone", "123", "department", "体育"));
+        var dupEmployee = postJson("/api/roster", Map.of(
+                "employeeId", "E001", "name", "李四", "phone", "13987654321", "department", "外语"));
+        assertThat(dupEmployee.getStatusCode().value()).isEqualTo(400);
+        assertThat(dupEmployee.getBody()).contains("DUPLICATE");
+
+        var dupPhone = postJson("/api/roster", Map.of(
+                "employeeId", "E002", "name", "李四", "phone", "13812345678", "department", "外语"));
+        assertThat(dupPhone.getStatusCode().value()).isEqualTo(400);
+        assertThat(dupPhone.getBody()).contains("PHONE_DUPLICATE");
+
+        var badPhone = postJson("/api/roster", Map.of(
+                "employeeId", "E003", "name", "王五", "phone", "123", "department", "体育"));
         assertThat(badPhone.getStatusCode().value()).isEqualTo(400);
     }
 
     @Test
     void deletePersonAlsoRemovesTeamMembership() {
-        byte[] bytes = rosterWorkbook(List.of(List.of("张三", "13812345678", "计算机")));
+        byte[] bytes = rosterWorkbook(List.of(List.of("E001", "张三", "13812345678", "计算机")));
         uploadRoster(bytes);
         Long personId = jdbc.queryForObject("SELECT id FROM person LIMIT 1", Long.class);
 

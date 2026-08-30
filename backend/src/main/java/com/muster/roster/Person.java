@@ -16,6 +16,8 @@ public class Person {
 
     private Long activityId;
 
+    private String employeeId;
+
     private String name;
 
     private String phone;

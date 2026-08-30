@@ -10,7 +10,8 @@ public enum ErrorCode {
     CONFLICT(409),
     ARCHIVE_REQUIRED(409),
     WINDOW_CLOSED(409),
-    PHONE_DUPLICATE(400);
+    PHONE_DUPLICATE(400),
+    DUPLICATE(400);
 
     private final int httpStatus;
 

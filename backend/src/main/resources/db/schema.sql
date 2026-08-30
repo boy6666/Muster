@@ -19,11 +19,13 @@ CREATE TABLE IF NOT EXISTS activity (
 CREATE TABLE IF NOT EXISTS person (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   activity_id BIGINT NOT NULL,
+  employee_id VARCHAR(32) NOT NULL,
   name VARCHAR(50) NOT NULL,
   phone VARCHAR(11) NOT NULL,
   department VARCHAR(100) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_activity_phone (activity_id, phone),
+  UNIQUE KEY uk_activity_employee (activity_id, employee_id),
   KEY idx_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -32,9 +34,10 @@ CREATE TABLE IF NOT EXISTS team (
   activity_id BIGINT NOT NULL,
   name VARCHAR(20) NOT NULL,
   status VARCHAR(10) NOT NULL DEFAULT 'PENDING',
+  leader_person_id BIGINT NULL,
   reject_reason VARCHAR(200) NULL,
   cap_token VARCHAR(36) NULL,
-  submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  submitted_at DATETIME NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_activity_name (activity_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

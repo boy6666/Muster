@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.muster.activity.Activity;
 import com.muster.activity.ActivityService;
 import com.muster.common.ApiException;
+import com.muster.common.EmployeeIdValidator;
 import com.muster.common.ErrorCode;
 import com.muster.common.PageParams;
 import com.muster.common.PageResult;
@@ -19,8 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.Clock;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,33 +50,58 @@ public class RosterService {
     public int importPersons(InputStream inputStream) {
         Activity activity = activityService.requireCurrent();
         List<PersonRow> rows = excelService.readPersons(inputStream).stream()
-                .filter(r -> !(r.name().isEmpty() && r.phone().isEmpty() && r.department().isEmpty()))
+                .filter(r -> !(r.employeeId().isEmpty() && r.name().isEmpty()
+                        && r.phone().isEmpty() && r.department().isEmpty()))
                 .toList();
         if (rows.isEmpty()) {
             throw new ApiException(ErrorCode.VALIDATION, "文件中没有可导入的数据行");
         }
         for (PersonRow row : rows) {
-            if (row.name().isEmpty() || row.department().isEmpty() || !PhoneValidator.valid(row.phone())) {
+            if (row.employeeId().isEmpty() || !EmployeeIdValidator.isValid(row.employeeId())
+                    || row.name().isEmpty() || row.department().isEmpty() || !PhoneValidator.valid(row.phone())) {
                 throw new ApiException(ErrorCode.VALIDATION,
-                        "第 " + row.rowNo() + " 行不合法：姓名/部门不能为空，手机号须为 11 位有效手机号");
+                        "第 " + row.rowNo() + " 行不合法：员工编号须为 1-32 位非空白字符，"
+                                + "姓名/部门不能为空，手机号须为 11 位有效手机号");
             }
         }
-        Map<String, List<PersonRow>> byPhone = rows.stream()
-                .collect(Collectors.groupingBy(PersonRow::phone));
-        String inFileDuplicates = byPhone.values().stream()
+        Map<String, List<PersonRow>> byEmployee = rows.stream()
+                .collect(Collectors.groupingBy(PersonRow::employeeId));
+        String inFileEmployeeDupes = byEmployee.values().stream()
                 .filter(list -> list.size() > 1)
                 .map(list -> "第 " + list.get(0).rowNo() + "/" + list.get(1).rowNo() + " 行")
                 .collect(Collectors.joining("、"));
-        if (!inFileDuplicates.isEmpty()) {
-            throw new ApiException(ErrorCode.PHONE_DUPLICATE, "文件内手机号重复：" + inFileDuplicates);
+        if (!inFileEmployeeDupes.isEmpty()) {
+            throw new ApiException(ErrorCode.DUPLICATE, "文件内员工编号重复：" + inFileEmployeeDupes);
+        }
+        Map<String, List<PersonRow>> byPhone = rows.stream()
+                .collect(Collectors.groupingBy(PersonRow::phone));
+        String inFilePhoneDupes = byPhone.values().stream()
+                .filter(list -> list.size() > 1)
+                .map(list -> "第 " + list.get(0).rowNo() + "/" + list.get(1).rowNo() + " 行")
+                .collect(Collectors.joining("、"));
+        if (!inFilePhoneDupes.isEmpty()) {
+            throw new ApiException(ErrorCode.PHONE_DUPLICATE, "文件内手机号重复：" + inFilePhoneDupes);
+        }
+        List<String> employeeIds = rows.stream().map(PersonRow::employeeId).toList();
+        List<String> phones = rows.stream().map(PersonRow::phone).toList();
+        Set<String> existingEmployees = new HashSet<>();
+        Set<String> existingPhones = new HashSet<>();
+        for (Person p : personMapper.selectList(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activity.getId())
+                .and(w -> w.in(Person::getEmployeeId, employeeIds).or().in(Person::getPhone, phones)))) {
+            existingEmployees.add(p.getEmployeeId());
+            existingPhones.add(p.getPhone());
         }
         for (PersonRow row : rows) {
-            if (countByPhone(activity.getId(), row.phone()) > 0) {
+            if (existingEmployees.contains(row.employeeId())) {
+                throw new ApiException(ErrorCode.DUPLICATE, "员工编号已在花名册中：" + row.employeeId());
+            }
+            if (existingPhones.contains(row.phone())) {
                 throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + row.phone());
             }
         }
         for (PersonRow row : rows) {
-            insert(activity.getId(), row.name(), row.phone(), row.department());
+            insert(activity.getId(), row.employeeId(), row.name(), row.phone(), row.department());
         }
         opLogService.record("ROSTER_IMPORT", "导入 " + rows.size() + " 人");
         return rows.size();
@@ -98,6 +126,13 @@ public class RosterService {
 
     public PersonResponse add(PersonCreateRequest request) {
         Activity activity = activityService.requireCurrent();
+        String employeeId = request.employeeId().trim();
+        if (!EmployeeIdValidator.isValid(employeeId)) {
+            throw new ApiException(ErrorCode.VALIDATION, "员工编号须为 1-32 位非空白字符");
+        }
+        if (countByEmployee(activity.getId(), employeeId) > 0) {
+            throw new ApiException(ErrorCode.DUPLICATE, "员工编号已在花名册中：" + employeeId);
+        }
         String phone = request.phone().trim();
         if (!PhoneValidator.valid(phone)) {
             throw new ApiException(ErrorCode.VALIDATION, "手机号须为 11 位有效手机号");
@@ -105,8 +140,8 @@ public class RosterService {
         if (countByPhone(activity.getId(), phone) > 0) {
             throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
         }
-        Person person = insert(activity.getId(), request.name().trim(), phone, request.department().trim());
-        opLogService.record("ROSTER_ADD", request.name().trim() + " " + phone);
+        Person person = insert(activity.getId(), employeeId, request.name().trim(), phone, request.department().trim());
+        opLogService.record("ROSTER_ADD", employeeId + " " + request.name().trim() + " " + phone);
         return PersonResponse.from(person);
     }
 
@@ -128,9 +163,16 @@ public class RosterService {
                 .eq(Person::getPhone, phone));
     }
 
-    private Person insert(Long activityId, String name, String phone, String department) {
+    private long countByEmployee(Long activityId, String employeeId) {
+        return personMapper.selectCount(new LambdaQueryWrapper<Person>()
+                .eq(Person::getActivityId, activityId)
+                .eq(Person::getEmployeeId, employeeId));
+    }
+
+    private Person insert(Long activityId, String employeeId, String name, String phone, String department) {
         Person person = new Person();
         person.setActivityId(activityId);
+        person.setEmployeeId(employeeId);
         person.setName(name);
         person.setPhone(phone);
         person.setDepartment(department);
@@ -138,8 +180,11 @@ public class RosterService {
         try {
             personMapper.insert(person);
         } catch (org.springframework.dao.DuplicateKeyException e) {
-            // 预查与插入之间的并发窗口由 uk_activity_phone 唯一键兜底
-            throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
+            // 预查与插入之间的并发窗口由 uk_activity_phone / uk_activity_employee 唯一键兜底
+            if (countByPhone(activityId, phone) > 0) {
+                throw new ApiException(ErrorCode.PHONE_DUPLICATE, "手机号已在花名册中：" + phone);
+            }
+            throw new ApiException(ErrorCode.DUPLICATE, "员工编号已在花名册中：" + employeeId);
         }
         return person;
     }

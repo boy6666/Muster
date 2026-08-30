@@ -4,16 +4,19 @@ import com.muster.common.PageResult;
 import com.muster.team.dto.ReviewRequest;
 import com.muster.team.dto.TeamAdminResponse;
 import com.muster.team.dto.TeamDetail;
-import com.muster.team.dto.TeamSubmitRequest;
+import com.muster.team.dto.TeamMemberRequest;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -24,6 +27,11 @@ public class TeamController {
 
     public TeamController(TeamService teamService) {
         this.teamService = teamService;
+    }
+
+    @PostMapping
+    public TeamDetail create(@RequestBody TeamMemberRequest request) {
+        return teamService.createByAdmin(request);
     }
 
     @GetMapping
@@ -39,7 +47,7 @@ public class TeamController {
     }
 
     @GetMapping("/{id}/events")
-    public java.util.List<com.muster.team.dto.TeamEventView> events(@PathVariable Long id) {
+    public List<com.muster.team.dto.TeamEventView> events(@PathVariable Long id) {
         return teamService.events(id);
     }
 
@@ -50,7 +58,13 @@ public class TeamController {
     }
 
     @PutMapping("/{id}/members")
-    public TeamDetail editMembers(@PathVariable Long id, @Valid @RequestBody TeamSubmitRequest request) {
+    public TeamDetail editMembers(@PathVariable Long id, @RequestBody TeamMemberRequest request) {
         return teamService.editByAdmin(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public Map<String, Object> delete(@PathVariable Long id) {
+        teamService.deleteByAdmin(id);
+        return Map.of("ok", true);
     }
 }

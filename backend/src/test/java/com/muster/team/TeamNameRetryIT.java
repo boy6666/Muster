@@ -28,7 +28,7 @@ class TeamNameRetryIT extends IntegrationTestBase {
                 "startTime", LocalDateTime.now(clock).minusHours(1).toString(),
                 "endTime", LocalDateTime.now(clock).plusHours(5).toString(),
                 "groupSizeLimit", 5));
-        uploadRoster(rosterWorkbook(List.of(List.of("张三", "13800000001", "计算机"))));
+        uploadRoster(rosterWorkbook(List.of(List.of("E001", "张三", "13800000001", "计算机"))));
         Long activityId = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(getJson("/api/activity").getBody()).path("id").asLong();
         formToken = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
@@ -43,7 +43,8 @@ class TeamNameRetryIT extends IntegrationTestBase {
 
     @Test
     void retryAdvancesNamePastSquattedCandidate() throws Exception {
-        var resp = postJson("/api/form/" + formToken + "/teams", Map.of("memberPhoneList", List.of("13800000001")));
+        var resp = postJson("/api/form/" + formToken + "/teams",
+                Map.of("leaderEmployeeId", "E001", "memberEmployeeIdList", List.of("E001")));
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         assertThat(com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(resp.getBody()).path("name").asText()).isEqualTo("组8");

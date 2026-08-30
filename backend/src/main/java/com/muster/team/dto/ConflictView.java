@@ -1,4 +1,4 @@
 package com.muster.team.dto;
 
-public record ConflictView(String phone, String name, String teamName) {
+public record ConflictView(String employeeId, String name, String teamName) {
 }

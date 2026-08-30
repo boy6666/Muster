@@ -1,5 +1,7 @@
 package com.muster.team;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.muster.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TeamOrphanMemberIT extends IntegrationTestBase {
 
+    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+
     private String formToken;
 
     @BeforeEach
@@ -27,25 +31,23 @@ class TeamOrphanMemberIT extends IntegrationTestBase {
                 "endTime", LocalDateTime.now(clock).plusHours(5).toString(),
                 "groupSizeLimit", 5));
         uploadRoster(rosterWorkbook(List.of(
-                List.of("张三", "13800000001", "计算机"),
-                List.of("李四", "13800000002", "外语"))));
-        formToken = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(getJson("/api/activity").getBody()).path("qrToken").asText();
+                List.of("E001", "张三", "13800000001", "计算机"),
+                List.of("E002", "李四", "13800000002", "外语"))));
+        formToken = MAPPER.readTree(getJson("/api/activity").getBody()).path("qrToken").asText();
     }
 
     @Test
     void teamDetailSurvivesDeletedRosterPerson() throws Exception {
-        var submitted = postJson("/api/form/" + formToken + "/teams",
-                Map.of("memberPhoneList", List.of("13800000001", "13800000002")));
-        assertThat(submitted.getStatusCode().value()).isEqualTo(200);
-        long teamId = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(submitted.getBody()).path("id").asLong();
+        var draft = postJson("/api/form/" + formToken + "/teams",
+                Map.of("leaderEmployeeId", "E001", "memberEmployeeIdList", List.of("E001", "E002")));
+        assertThat(draft.getStatusCode().value()).isEqualTo(200);
+        long teamId = MAPPER.readTree(draft.getBody()).path("id").asLong();
 
         // 模拟竞态残留：绕过 roster API 直接删 person 行（历史库无外键时留下孤儿成员行）
-        jdbc.update("DELETE FROM person WHERE phone = '13800000002'");
+        jdbc.update("DELETE FROM person WHERE employee_id = 'E002'");
 
         var resp = getJson("/api/teams/" + teamId);
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
-        assertThat(resp.getBody()).doesNotContain("13800000002");
+        assertThat(resp.getBody()).doesNotContain("李四").doesNotContain("13800000002");
     }
 }

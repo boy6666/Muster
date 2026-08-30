@@ -40,10 +40,16 @@ public class StatsService {
         long pendingTeamCount = teams.stream()
                 .filter(t -> "PENDING".equals(t.getStatus()))
                 .count();
-        long joined = teams.isEmpty() ? 0 : teamMemberMapper.selectCount(new LambdaQueryWrapper<TeamMember>()
-                .in(TeamMember::getTeamId, teams.stream().map(Team::getId).toList()));
+        // 已报名 = 非草稿组的成员（提交即算，驳回不回落）；分组数含草稿
+        List<Long> nonDraftIds = teams.stream()
+                .filter(t -> !"DRAFT".equals(t.getStatus()))
+                .map(Team::getId)
+                .toList();
+        long registered = nonDraftIds.isEmpty() ? 0
+                : teamMemberMapper.selectCount(new LambdaQueryWrapper<TeamMember>()
+                        .in(TeamMember::getTeamId, nonDraftIds));
         long total = personMapper.selectCount(new LambdaQueryWrapper<com.muster.roster.Person>()
                 .eq(com.muster.roster.Person::getActivityId, activity.getId()));
-        return new StatsDto(total, joined, total - joined, teamCount, pendingTeamCount);
+        return new StatsDto(total, registered, total - registered, teamCount, pendingTeamCount);
     }
 }

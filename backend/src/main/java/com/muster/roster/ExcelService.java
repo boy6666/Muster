@@ -33,17 +33,18 @@ public class ExcelService {
     public byte[] writeJoined(List<JoinedRow> rows) {
         List<List<Object>> data = new ArrayList<>();
         for (JoinedRow r : rows) {
-            data.add(List.of(s(r.name()), s(r.phone()), s(r.department()), s(r.teamName()), s(r.submittedAt())));
+            data.add(List.of(s(r.employeeId()), s(r.name()), s(r.phone()), s(r.department()),
+                    s(r.teamName()), r.isLeader() != null && r.isLeader() == 1 ? "是" : "否"));
         }
-        return write(head("姓名", "手机号", "部门", "组名", "提交时间"), data, "已参加");
+        return write(head("员工编号", "姓名", "手机号", "部门", "组别", "是否组长"), data, "已参加");
     }
 
     public byte[] writeMissing(List<MissingRow> rows) {
         List<List<Object>> data = new ArrayList<>();
         for (MissingRow r : rows) {
-            data.add(List.of(s(r.name()), s(r.phone()), s(r.department())));
+            data.add(List.of(s(r.employeeId()), s(r.name()), s(r.phone()), s(r.department())));
         }
-        return write(head("姓名", "手机号", "部门"), data, "未参加");
+        return write(head("员工编号", "姓名", "手机号", "部门"), data, "未参加");
     }
 
     public byte[] writeArchive(List<JoinedRow> joined, List<MissingRow> missing,
@@ -51,27 +52,27 @@ public class ExcelService {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             com.alibaba.excel.ExcelWriter writer = EasyExcel.write(out).build();
             com.alibaba.excel.write.metadata.WriteSheet joinedSheet = EasyExcel.writerSheet(0, "已参加")
-                    .head(head("姓名", "手机号", "部门", "组名", "提交时间")).build();
+                    .head(head("员工编号", "姓名", "手机号", "部门", "组别", "是否组长")).build();
             List<List<Object>> joinedData = new ArrayList<>();
             for (JoinedRow r : joined) {
-                joinedData.add(List.of(s(r.name()), s(r.phone()), s(r.department()),
-                        s(r.teamName()), s(r.submittedAt())));
+                joinedData.add(List.of(s(r.employeeId()), s(r.name()), s(r.phone()), s(r.department()),
+                        s(r.teamName()), r.isLeader() != null && r.isLeader() == 1 ? "是" : "否"));
             }
             writer.write(joinedData, joinedSheet);
 
             com.alibaba.excel.write.metadata.WriteSheet missingSheet = EasyExcel.writerSheet(1, "未参加")
-                    .head(head("姓名", "手机号", "部门")).build();
+                    .head(head("员工编号", "姓名", "手机号", "部门")).build();
             List<List<Object>> missingData = new ArrayList<>();
             for (MissingRow r : missing) {
-                missingData.add(List.of(s(r.name()), s(r.phone()), s(r.department())));
+                missingData.add(List.of(s(r.employeeId()), s(r.name()), s(r.phone()), s(r.department())));
             }
             writer.write(missingData, missingSheet);
 
             com.alibaba.excel.write.metadata.WriteSheet detailSheet = EasyExcel.writerSheet(2, "分组明细")
-                    .head(head("组名", "组员姓名", "手机号", "部门", "组状态", "驳回理由")).build();
+                    .head(head("组名", "员工编号", "姓名", "手机号", "部门", "组状态", "驳回理由")).build();
             List<List<Object>> detailData = new ArrayList<>();
             for (com.muster.roster.dto.ArchiveDetailRow r : details) {
-                detailData.add(List.of(s(r.teamName()), s(r.memberName()), s(r.phone()),
+                detailData.add(List.of(s(r.teamName()), s(r.employeeId()), s(r.memberName()), s(r.phone()),
                         s(r.department()), s(r.teamStatus()), s(r.rejectReason())));
             }
             writer.write(detailData, detailSheet);

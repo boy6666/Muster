@@ -151,6 +151,67 @@ class StatsFlowIT extends IntegrationTestBase {
         assertThat(stats.path("pendingTeamCount").asLong()).isZero();
     }
 
+    @Test
+    void exportJoinedOnlyConfirmed() throws Exception {
+        // 已参加 = 仅通过审核（CONFIRMED）的组成员；第 5 列组别、第 6 列是否组长
+        var resp = getBytes("/api/stats/export?type=JOINED");
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+        List<Map<Integer, String>> rows = com.alibaba.excel.EasyExcel
+                .read(new java.io.ByteArrayInputStream(resp.getBody())).sheet().doReadSync();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get(0)).isEqualTo("E003");
+        assertThat(rows.get(0).get(1)).isEqualTo("王五");
+        assertThat(rows.get(0).get(4)).isEqualTo("组2");
+        assertThat(rows.get(0).get(5)).isEqualTo("是");
+    }
+
+    @Test
+    void exportMissingExcludesConfirmed() throws Exception {
+        // 未参加 = 不在任何通过组里的人（待审核/草稿/未报名都算未参加）
+        var resp = getBytes("/api/stats/export?type=MISSING");
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+        List<Map<Integer, String>> rows = com.alibaba.excel.EasyExcel
+                .read(new java.io.ByteArrayInputStream(resp.getBody())).sheet().doReadSync();
+        assertThat(rows).hasSize(4);
+        assertThat(rows.get(0).get(0)).isEqualTo("E001");
+        assertThat(rows.get(1).get(0)).isEqualTo("E002");
+        assertThat(rows.get(2).get(0)).isEqualTo("E004");
+        assertThat(rows.get(3).get(0)).isEqualTo("E005");
+    }
+
+    @Test
+    void archiveSheetsCarryEmployeeId() throws Exception {
+        var resp = postBytes("/api/activity/export/archive");
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
+
+        byte[] bytes = resp.getBody();
+        List<Map<Integer, String>> sheet0 = com.alibaba.excel.EasyExcel
+                .read(new java.io.ByteArrayInputStream(bytes)).sheet(0).doReadSync();
+        List<Map<Integer, String>> sheet1 = com.alibaba.excel.EasyExcel
+                .read(new java.io.ByteArrayInputStream(bytes)).sheet(1).doReadSync();
+        List<Map<Integer, String>> sheet2 = com.alibaba.excel.EasyExcel
+                .read(new java.io.ByteArrayInputStream(bytes)).sheet(2).doReadSync();
+        assertThat(sheet0).hasSize(1);
+        assertThat(sheet0.get(0).get(0)).isEqualTo("E003");
+        assertThat(sheet0.get(0).get(5)).isEqualTo("是");
+        assertThat(sheet1).hasSize(4);
+        assertThat(sheet1.get(0).get(0)).isEqualTo("E001");
+        // 分组明细含草稿组3 成员，共 4 行
+        assertThat(sheet2).hasSize(4);
+        assertThat(sheet2.get(3).get(1)).isEqualTo("E004");
+        assertThat(sheet2.get(3).get(5)).isEqualTo("DRAFT");
+
+        Boolean exported = jdbc.queryForObject("SELECT exported FROM activity LIMIT 1", Boolean.class);
+        assertThat(exported).isTrue();
+    }
+
+    @Test
+    void exportInvalidType400() {
+        var resp = getJson("/api/stats/export?type=BOTH");
+        assertThat(resp.getStatusCode().value()).isEqualTo(400);
+        assertThat(resp.getBody()).contains("VALIDATION");
+    }
+
     static class FrameCaptor implements WebSocket.Listener {
         final BlockingQueue<String> frames = new LinkedBlockingQueue<>();
 

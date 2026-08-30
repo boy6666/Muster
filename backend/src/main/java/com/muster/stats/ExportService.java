@@ -35,7 +35,7 @@ public class ExportService {
     public byte[] export(String type) {
         Activity activity = activityService.requireCurrent();
         if ("JOINED".equalsIgnoreCase(type)) {
-            return excelService.writeJoined(toJoinedRows(exportMapper.selectJoined(activity.getId())));
+            return excelService.writeJoined(exportMapper.selectJoined(activity.getId()));
         }
         if ("MISSING".equalsIgnoreCase(type)) {
             return excelService.writeMissing(exportMapper.selectMissing(activity.getId()));
@@ -47,19 +47,12 @@ public class ExportService {
     public byte[] archive() {
         Activity activity = activityService.requireCurrent();
         byte[] bytes = excelService.writeArchive(
-                toJoinedRows(exportMapper.selectJoined(activity.getId())),
+                exportMapper.selectJoined(activity.getId()),
                 exportMapper.selectMissing(activity.getId()),
                 exportMapper.selectArchiveDetail(activity.getId()));
         activity.setExported(true);
         activityMapper.updateById(activity);
         opLogService.record("ACTIVITY_ARCHIVE", activity.getName());
         return bytes;
-    }
-
-    private List<JoinedRow> toJoinedRows(List<JoinedRow> rows) {
-        return rows.stream()
-                .map(r -> new JoinedRow(r.name(), r.phone(), r.department(), r.teamName(),
-                        r.submittedAt() == null ? "" : r.submittedAt()))
-                .toList();
     }
 }

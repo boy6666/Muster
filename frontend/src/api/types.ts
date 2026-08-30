@@ -9,12 +9,15 @@ export interface ActivityResponse {
   manuallyEnded: boolean
   windowStatus: 'NOT_STARTED' | 'ACTIVE' | 'ENDED'
 }
+export interface RecentEvent { teamId: number; teamName: string; type: string; detail: string | null; createdAt: string }
+export interface SizeBucket { size: number; count: number; overLimit: boolean }
 export interface Stats {
   total: number
   registered: number
   notRegistered: number
   teamCount: number
   pendingTeamCount: number
+  recentEvents?: RecentEvent[]
 }
 export interface FormInfo {
   name: string

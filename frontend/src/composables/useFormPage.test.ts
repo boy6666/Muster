@@ -111,7 +111,7 @@ describe('useFormPage', () => {
     mock.onGet(new RegExp('/api/form/tk/teams/7\\?cap=cap-7$')).reply(200, teamDetail({ status: 'DRAFT' }))
     await page.load()
     await page.startEdit()
-    page.members.value.push({ employeeId: 'E002', name: '李四', phone: '13800000002', department: '外语' })
+    page.members.value.push({ employeeId: 'E002', name: '李四', phone: '13800000002', department: '外语', isLeader: false })
     mock.onPut(new RegExp('/api/form/tk/teams/7\\?cap=cap-7$')).reply(config => {
       expect(JSON.parse(config.data)).toEqual({
         leaderEmployeeId: 'E001', memberEmployeeIdList: ['E001', 'E002'] })

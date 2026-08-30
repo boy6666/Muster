@@ -137,6 +137,65 @@ class StatsFlowIT extends IntegrationTestBase {
     }
 
     @Test
+    void websocketFrameCarriesRecentEvents() throws Exception {
+        FrameCaptor captor = new FrameCaptor();
+        HttpClient client = HttpClient.newHttpClient();
+        WebSocket webSocket = client.newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws/stats?token=" + token), captor)
+                .join();
+
+        // setup 已产生 6 条事件（建组×3 + 提交×2 + 审核通过×1），首帧按 id 倒序携带
+        String first = captor.frames.poll(5, TimeUnit.SECONDS);
+        assertThat(first).isNotNull();
+        JsonNode events = MAPPER.readTree(first).path("recentEvents");
+        assertThat(events.isArray()).isTrue();
+        assertThat(events).hasSize(6);
+        assertThat(events.get(0).path("teamId").asLong()).isEqualTo(team3);
+        assertThat(events.get(0).path("teamName").asText()).isEqualTo("组3");
+        assertThat(events.get(0).path("type").asText()).isEqualTo("CREATED");
+        assertThat(events.get(0).path("detail").asText()).isEqualTo("建组 1 人");
+        assertThat(events.get(0).path("createdAt").asText()).isNotBlank();
+        assertThat(events.get(1).path("type").asText()).isEqualTo("PASSED");
+        assertThat(events.get(1).path("teamName").asText()).isEqualTo("组2");
+
+        // 提交组3 → 推送帧同样携带 recentEvents，首条为 SUBMITTED
+        postJson("/api/form/" + formToken + "/teams/" + team3 + "/submit",
+                Map.of("leaderPhone", "13800000004"));
+        String pushed = captor.frames.poll(5, TimeUnit.SECONDS);
+        assertThat(pushed).isNotNull();
+        JsonNode pushEvents = MAPPER.readTree(pushed).path("recentEvents");
+        assertThat(pushEvents.isArray()).isTrue();
+        assertThat(pushEvents.get(0).path("type").asText()).isEqualTo("SUBMITTED");
+        assertThat(pushEvents.get(0).path("teamId").asLong()).isEqualTo(team3);
+        assertThat(pushEvents.get(0).path("teamName").asText()).isEqualTo("组3");
+
+        webSocket.abort();
+        client.close();
+    }
+
+    @Test
+    void websocketRecentEventsFallsBackForDeletedTeam() throws Exception {
+        // 事件仍指向已删除的组（正常流程删组会清事件，此处直插兜底场景）→ 显示「已删除组」
+        jdbc.update("INSERT INTO team_event(team_id, activity_id, type, detail) " +
+                "SELECT 99999, id, 'CREATED', '建组 9 人' FROM activity LIMIT 1");
+
+        FrameCaptor captor = new FrameCaptor();
+        HttpClient client = HttpClient.newHttpClient();
+        WebSocket webSocket = client.newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws/stats?token=" + token), captor)
+                .join();
+        String first = captor.frames.poll(5, TimeUnit.SECONDS);
+        assertThat(first).isNotNull();
+        JsonNode events = MAPPER.readTree(first).path("recentEvents");
+        assertThat(events).hasSize(7);
+        assertThat(events.get(0).path("teamId").asLong()).isEqualTo(99999);
+        assertThat(events.get(0).path("teamName").asText()).isEqualTo("已删除组");
+
+        webSocket.abort();
+        client.close();
+    }
+
+    @Test
     void statsAllZeroWithoutActivity() throws Exception {
         jdbc.update("DELETE FROM team_member");
         jdbc.update("DELETE FROM team");

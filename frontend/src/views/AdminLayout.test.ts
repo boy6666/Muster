@@ -145,6 +145,15 @@ describe('AdminLayout', () => {
     }
   })
 
+  it('点管理员菜单外部区域收起下拉', async () => {
+    await mountLayout()
+    await openAdminMenu()
+    expect(wrapper!.find('.admin-menu').exists()).toBe(true)
+    await wrapper!.find('.crumb').trigger('click')
+    await nextTick()
+    expect(wrapper!.find('.admin-menu').exists()).toBe(false)
+  })
+
   it('点退出登录:token 清空且跳转 /login', async () => {
     await mountLayout()
     await openAdminMenu()

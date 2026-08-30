@@ -78,8 +78,19 @@ onMounted(() => {
   timer = setInterval(() => {
     clock.value = fmtNow()
   }, 1000)
+  document.addEventListener('click', onDocClick)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  document.removeEventListener('click', onDocClick)
+})
+
+/** 管理员菜单点外部收起;chip 与菜单项自身都在 .top-right 内,不触发 */
+function onDocClick(e: MouseEvent) {
+  if (menuOpen.value && !(e.target as HTMLElement).closest?.('.top-right')) {
+    menuOpen.value = false
+  }
+}
 
 function fmtNow() {
   const d = new Date()

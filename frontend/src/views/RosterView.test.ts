@@ -162,4 +162,20 @@ describe('RosterView', () => {
     expect(mock.history.delete.filter(h => h.url === '/api/roster/1')).toHaveLength(1)
     expect(toasts.some(t => t.type === 'success' && t.msg === '已删除')).toBe(true)
   })
+
+  it('导入成功：toast 显示导入人数(读后端 {imported} 字段)', async () => {
+    mock.onPost('/api/roster/import').reply(200, { imported: 5 })
+    const wrapper = await mountView()
+    const importOpen = wrapper.findAll('button').find(b => b.text().includes('导入 Excel'))!
+    await importOpen.trigger('click')
+    await flushPromises()
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    Object.defineProperty(fileInput, 'files', { value: [new File(['x'], 'roster.xlsx')] })
+    const importBtn = [...document.querySelectorAll('.ui-modal-foot button')]
+      .find(b => b.textContent === '导入') as HTMLButtonElement
+    importBtn.click()
+    await flushPromises()
+    expect(mock.history.post.filter(h => h.url === '/api/roster/import')).toHaveLength(1)
+    expect(toasts.some(t => t.type === 'success' && t.msg === '导入 5 人')).toBe(true)
+  })
 })

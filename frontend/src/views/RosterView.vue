@@ -171,8 +171,8 @@ async function submitImport() {
   try {
     const body = new FormData()
     body.append('file', file)
-    const { data } = await http.post<number>('/api/roster/import', body)
-    toast.success(`导入 ${data} 人`)
+    const { data } = await http.post<{ imported: number }>('/api/roster/import', body)
+    toast.success(`导入 ${data.imported} 人`)
     importVisible.value = false
     await load()
   } catch (e) {
